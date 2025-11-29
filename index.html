@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Muzic Mini App</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
+        audio { width: 90%; max-width: 400px; }
+    </style>
+</head>
+<body>
+    <h1>🎵 हाई-क्वालिटी म्यूजिक प्लेयर</h1>
+    <p>यह सीधे आपके Render बैकएंड से स्ट्रीम हो रहा है।</p>
+    
+    <audio controls autoplay>
+        <source src="https://YOUR-RENDER-BACKEND-URL.onrender.com/stream-audio" type="audio/mpeg">
+        आपका ब्राउज़र ऑडियो स्ट्रीमिंग को सपोर्ट नहीं करता।
+    </audio>
+
+    <script>
+        // Mini App के लिए आवश्यक Telegram Web App SDK
+        // इसे जोड़ने से आप Telegram से इंटरेक्ट कर सकते हैं
+        window.onload = function() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                // Mini App को बंद करने के लिए बटन दिखाएँ
+                Telegram.WebApp.ready();
+                Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
+                    Telegram.WebApp.close();
+                });
+            }
+        };
+    </script>
+</body>
+</html>
