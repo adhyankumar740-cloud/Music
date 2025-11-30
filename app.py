@@ -3,7 +3,9 @@ import requests
 import json
 from flask import Flask, send_file, request, jsonify, abort
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackContext
+# नई और सही इम्पोर्ट लाइनें (PTB v20+ के लिए)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update
 from io import BytesIO
 
 # --- Configuration (Set these as Environment Variables on Render) ---
