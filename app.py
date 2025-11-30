@@ -31,7 +31,7 @@ else:
 # --- Music File Path and Handlers ---
 
 # सुनिश्चित करें कि आपके प्रोजेक्ट में 'music' फ़ोल्डर के अंदर 'sample.mp3' फ़ाइल मौजूद है।
-MUSIC_FILE_PATH = "" 
+MUSIC_FILE_PATH = "Tum Hi Ho (From Aashiqui 2).mp3" 
 
 def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /play command and sends the Mini App link."""
