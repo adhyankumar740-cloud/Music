@@ -31,7 +31,7 @@ else:
     bot = None
 
 # --- Music File Path and Handlers ---
-MUSIC_FILE_PATH = "music/sample.mp3" 
+MUSIC_FILE_PATH = "Tum Hi Ho (From Aashiqui 2).mp3" 
 
 # ContextTypes.DEFAULT_TYPE नए PTB वर्ज़न में इस्तेमाल होता है
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
