@@ -1,31 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Muzic Mini App</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelStream Music Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
-        audio { width: 90%; max-width: 400px; }
+        :root {
+            --primary-color: #2e8b57; /* Sea Green */
+            --secondary-color: #1a1a1a;
+            --background-color: #121212; /* Dark background */
+            --text-color: #e0e0e0;
+            --card-background: #1e1e1e;
+            --border-radius: 12px;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-background);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: 0 8px 30px var(--shadow-color);
+            max-width: 450px;
+            width: 90%;
+            box-sizing: border-box;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .container:hover {
+            transform: translateY(-5px);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        p {
+            font-size: 1.1em;
+            color: var(--text-color);
+            margin-top: 0;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .audio-player-wrapper {
+            margin-top: 30px;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.6);
+        }
+
+        audio {
+            width: 100%;
+            background: var(--secondary-color);
+            border-radius: 8px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        /* Customize audio controls */
+        audio::-webkit-media-controls-panel {
+            background-color: var(--secondary-color);
+            color: var(--text-color);
+        }
+        audio::-webkit-media-controls-play-button,
+        audio::-webkit-media-controls-current-time-display,
+        audio::-webkit-media-controls-time-remaining-display {
+            color: var(--primary-color);
+        }
+        audio::-webkit-media-controls-timeline,
+        audio::-webkit-media-controls-volume-slider {
+            background-color: var(--primary-color);
+            border-radius: 5px;
+        }
+
+        .footer-text {
+            margin-top: 25px;
+            font-size: 0.9em;
+            color: #888;
+        }
     </style>
 </head>
 <body>
-    <h1>🎵 हाई-क्वालिटी म्यूजिक प्लेयर</h1>
-    <p>यह सीधे आपके Render बैकएंड से स्ट्रीम हो रहा है।</p>
-    
-    <audio controls autoplay>
-        <source src="https://music-epe1.onrender.com/stream-audio" type="audio/mpeg">
-        आपका ब्राउज़र ऑडियो स्ट्रीमिंग को सपोर्ट नहीं करता।
-    </audio>
+    <div class="container">
+        <h1>🎵 PixelStream Player</h1>
+        <p>Experience high-quality audio, directly streamed from our Render backend.</p>
+        
+        <div class="audio-player-wrapper">
+            <audio controls autoplay>
+                <source src="https://music-bva7.onrender.com/stream-audio" type="audio/mpeg">
+                Your browser does not support audio streaming.
+            </audio>
+        </div>
+
+        <p class="footer-text">Powered by Telegram Mini Apps</p>
+    </div>
 
     <script>
-        // Mini App के लिए आवश्यक Telegram Web App SDK
-        // इसे जोड़ने से आप Telegram से इंटरेक्ट कर सकते हैं
+        // Telegram Web App SDK initialization
         window.onload = function() {
             if (window.Telegram && window.Telegram.WebApp) {
-                // Mini App को बंद करने के लिए बटन दिखाएँ
                 Telegram.WebApp.ready();
+                Telegram.WebApp.expand(); // Optional: Make the Mini App fill the screen
+                Telegram.WebApp.setHeaderColor('#1a1a1a'); // Custom header color (Telegram app bar)
+                Telegram.WebApp.setBackgroundColor('#121212'); // Custom background color
+
                 Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
                     Telegram.WebApp.close();
                 });
+            } else {
+                console.warn("Telegram WebApp SDK not found. Running in standalone mode.");
             }
         };
     </script>
