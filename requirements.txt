@@ -3,3 +3,4 @@ python-telegram-bot[webhooks]
 requests
 python-dotenv  
 gunicorn
+flask-socketio
