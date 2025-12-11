@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Group Sync Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #ff0000;
+            --secondary-color: #1a1a1a;
+            --background-color: #121212; 
+            --text-color: #e0e0e0;
+            --card-background: #1e1e1e;
+            --border-radius: 12px;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: var(--card-background);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: 0 8px 30px var(--shadow-color);
+            max-width: 450px;
+            width: 90%;
+            box-sizing: border-box;
+        }
+        .audio-player-wrapper {
+            margin-top: 30px;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            padding: 10px;
+        }
+        #status-message { color: #ffeb3b; margin-top: 15px; font-size: 1.0em; }
+        .footer-text { margin-top: 25px; font-size: 0.9em; color: #888; }
+        .search-item:hover { background-color: #2a2a2a; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    
+    <script>
+      var tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    </script>
+
+</head>
+<body>
+    <div class="container">
+        <h1>▶️ Group YouTube Sync</h1>
+        <p>Search and play music synchronously.</p>
+        
+        <div class="search-section" id="searchSection" style="margin-bottom: 20px;">
+            <input type="text" id="searchQuery" placeholder="गाने का नाम या कलाकार खोजें..." 
+                   style="width: 70%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #333; color: white;">
+            <button id="searchButton" 
+                    style="width: 25%; padding: 10px; border-radius: 8px; border: none; background-color: var(--primary-color); color: white; cursor: pointer;">
+                खोजें
+            </button>
+        </div>
+
+        <div id="searchResults" style="max-height: 200px; overflow-y: auto; text-align: left; margin-bottom: 20px;">
+            <p style="text-align:center; color:#ccc;">गाने खोजने के लिए ऊपर टाइप करें।</p>
+        </div>
+
+        <div class="audio-player-wrapper" id="playerWrapper" style="display: none;">
+            <div id="youtubePlayer" style="width: 100%; height: 250px;"></div>
+        </div>
+        
+        <div id="status-message">Connecting to sync server...</div>
+
+        <p class="footer-text">Powered by YouTube API & SocketIO</p>
+    </div>
+
+    <script>
+        const statusMessage = document.getElementById('status-message');
+        const searchButton = document.getElementById('searchButton');
+        const searchQueryInput = document.getElementById('searchQuery');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const playerWrapper = document.getElementById('playerWrapper');
+        const searchSection = document.getElementById('searchSection');
+        
+        // 1. URL से Parameters निकालें
+        const urlParams = new URLSearchParams(window.location.search);
+        const chat_id = urlParams.get('chat_id');
+
+        // FIX: अपने Render Backend URL को यहाँ भी उपयोग करें
+        const BACKEND_BASE_URL = "https://music-bva7.onrender.com"; 
+        
+        let currentVideoId = null; 
+        let player;
+        let isReady = false;
+        let lastControlTime = 0;
+        const CONTROL_COOLDOWN = 500; // ms
+
+        // 2. SocketIO कनेक्शन सेट करें
+        const socket = io(BACKEND_BASE_URL, { transports: ['websocket', 'polling'] });
+        
+        // **********************************************
+        // ********* YouTube Player Functions ***********
+        // **********************************************
+
+        function onYouTubeIframeAPIReady() {
+            isReady = true;
+            // प्लेयर को बाद में लोड किया जाएगा, अभी केवल API को तैयार करें
+            statusMessage.textContent = "YouTube API ready. Connecting...";
+        }
+
+        function loadPlayer(videoId) {
+            currentVideoId = videoId;
+            // यदि प्लेयर पहले से ही लोड है, तो वीडियो बदलें
+            if (player) {
+                player.loadVideoById(videoId);
+            } else {
+                // पहली बार प्लेयर लोड करें
+                player = new YT.Player('youtubePlayer', {
+                    height: '250',
+                    width: '100%',
+                    videoId: videoId,
+                    playerVars: {
+                        'controls': 1, 
+                        'rel': 0,
+                        'showinfo': 0,
+                        'modestbranding': 1,
+                        'fs': 0, 
+                        'autoplay': 1, // ऑटोप्ले के लिए प्रयास करें
+                    },
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
+                    }
+                });
+            }
+             // UI अपडेट करें
+            searchSection.style.display = 'none';
+            searchResultsDiv.style.display = 'none';
+            playerWrapper.style.display = 'block';
+            statusMessage.textContent = `Video loaded. Syncing...`;
+        }
+
+
+        function onPlayerReady(event) {
+            statusMessage.textContent = "Player ready. Starting sync.";
+            // onReady पर ग्रुप में शामिल हों
+            socket.emit('join_group', { chat_id: chat_id });
+        }
+
+        function onPlayerStateChange(event) {
+            if (Date.now() - lastControlTime < CONTROL_COOLDOWN) {
+                return;
+            }
+
+            const currentState = event.data;
+            const currentTime = player.getCurrentTime();
+
+            if (currentState === YT.PlayerState.PLAYING) {
+                sendControl('play', currentTime);
+            } else if (currentState === YT.PlayerState.PAUSED || currentState === YT.PlayerState.BUFFERING) {
+                sendControl('pause', currentTime);
+            }
+        }
+        
+        // 3. यूज़र एक्शन को सर्वर पर भेजें
+        const sendControl = (action, time) => {
+            lastControlTime = Date.now(); 
+            socket.emit('control_stream', {
+                chat_id: chat_id,
+                action: action,
+                time: time,
+                video_id: currentVideoId // NEW: वीडियो ID भेजें ताकि नए सदस्य/पुराने सदस्य सिंक हो सकें
+            });
+        };
+
+        // **********************************************
+        // ********* SEARCH LOGIC ***********
+        // **********************************************
+
+        searchButton.onclick = () => {
+            const query = searchQueryInput.value.trim();
+            if (query.length < 3) {
+                searchResultsDiv.innerHTML = '<p style="color:red; text-align:center;">कम से कम 3 अक्षर टाइप करें।</p>';
+                return;
+            }
+            statusMessage.textContent = `Searching for "${query}"...`;
+            fetchResults(query);
+        };
+
+        function fetchResults(query) {
+            const searchUrl = `${BACKEND_BASE_URL}/search-youtube?q=${encodeURIComponent(query)}`;
+            
+            fetch(searchUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => Promise.reject(err.error));
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    displayResults(data.results);
+                    if(data.results.length === 0) {
+                        statusMessage.textContent = 'कोई परिणाम नहीं मिला।';
+                    } else {
+                        statusMessage.textContent = `${data.results.length} परिणाम मिले। गाना चुनें।`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    searchResultsDiv.innerHTML = `<p style="color:red; text-align:center;">खोज विफल: ${error || 'Unknown error'}.</p>`;
+                    statusMessage.textContent = 'Search failed (Check API Key).';
+                });
+        }
+
+        function displayResults(results) {
+            searchResultsDiv.innerHTML = '';
+            results.forEach(item => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'search-item';
+                resultItem.style.cssText = 'padding: 10px; border-bottom: 1px solid #333; cursor: pointer; display: flex; align-items: center;';
+                resultItem.innerHTML = `
+                    <img src="${item.thumbnail}" style="width: 40px; height: 40px; margin-right: 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: var(--text-color);">${item.title}</strong><br>
+                        <small style="color: #888;">${item.channel}</small>
+                    </div>
+                `;
+                // जब यूज़र परिणाम चुनता है, तो लोड न्यू वीडियो और प्ले कमांड भेजें
+                resultItem.onclick = () => {
+                    loadNewVideo(item.id, item.title);
+                    sendControl('play', 0); // गाना 0 सेकंड से शुरू करें और प्ले कमांड भेजें
+                };
+                searchResultsDiv.appendChild(resultItem);
+            });
+            searchResultsDiv.style.display = 'block';
+        }
+
+        function loadNewVideo(videoId, title) {
+             // लोड वीडियो फ़ंक्शन को अपडेट करें
+             currentVideoId = videoId;
+             if (!player) {
+                 loadPlayer(videoId);
+             } else {
+                 player.loadVideoById(videoId); // सीधे वीडियो लोड करें
+             }
+             
+             searchSection.style.display = 'none';
+             searchResultsDiv.style.display = 'none';
+             playerWrapper.style.display = 'block';
+
+             statusMessage.textContent = `Now playing: ${title}. Syncing...`;
+        }
+
+        // **********************************************
+        // ********* SocketIO Sync Logic ***********
+        // **********************************************
+        
+        socket.on('sync_control', (data) => {
+            if (Date.now() - lastControlTime < CONTROL_COOLDOWN) {
+                return;
+            }
+
+            const action = data.action;
+            const time = data.time;
+            const receivedVideoId = data.video_id; // NEW: Received Video ID
+
+            if (!isReady) return;
+
+            // 1. वीडियो आईडी चेक करें
+            if (receivedVideoId && receivedVideoId !== currentVideoId) {
+                // अगर ग्रुप नया गाना चला रहा है, तो हमारा प्लेयर भी नया गाना लोड करेगा
+                loadNewVideo(receivedVideoId, "New Group Song");
+            }
+            
+            // 2. प्लेबैक सिंक्रनाइज़ करें
+            const currentTime = player.getCurrentTime();
+            const timeDifference = Math.abs(currentTime - time); 
+
+            if (action === 'play') {
+                if (timeDifference > 2) { 
+                    player.seekTo(time, true); 
+                    statusMessage.textContent = `Synced: Jumped to ${Math.floor(time)}s and playing.`;
+                } else {
+                    player.playVideo();
+                }
+
+            } else if (action === 'pause') {
+                player.pauseVideo();
+                if (timeDifference > 2) { 
+                    player.seekTo(time, true); 
+                }
+                statusMessage.textContent = `Synced: Paused at ${Math.floor(time)}s`;
+            }
+        });
+        
+        // 5. Telegram Web App SDK initialization (Same as before)
+        window.onload = function() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+                Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
+                    Telegram.WebApp.close();
+                });
+            }
+        };
+    </script>
+</body>
+</html>
