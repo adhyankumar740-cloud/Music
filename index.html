@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Sync Audio Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* --- General & Variables (Spotify Style) --- */
+        :root {
+            --primary-color: #1DB954; 
+            --secondary-color: #282828; 
+            --background-color: #121212; 
+            --text-color: #ffffff;
+            --muted-text-color: #b3b3b3;
+            --control-color: #f1f1f1;
+            --border-radius: 12px;
+            --shadow-color: rgba(0, 0, 0, 0.8);
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px 15px;
+            box-sizing: border-box;
+        }
+        h1 { font-weight: 700; font-size: 1.5em; margin-bottom: 5px; }
+        p { color: var(--muted-text-color); font-size: 0.9em; margin-bottom: 20px; }
+
+        /* --- Search & Results --- */
+        .search-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        #searchQuery { flex-grow: 1; padding: 12px 15px; border-radius: 8px; border: 1px solid #333; background: #222; color: var(--text-color); }
+        #searchButton { padding: 12px 20px; border-radius: 8px; border: none; background-color: var(--primary-color); color: white; font-weight: 600; cursor: pointer; }
+        #searchResults { max-height: 300px; overflow-y: auto; background: var(--secondary-color); border-radius: var(--border-radius); box-shadow: 0 4px 15px var(--shadow-color); }
+        .search-item { padding: 12px 15px; display: flex; align-items: center; cursor: pointer; border-bottom: 1px solid #333; transition: background-color 0.15s; }
+        .search-item:hover { background-color: #383838; }
+        .search-item img { width: 55px; height: 55px; margin-right: 15px; border-radius: 6px; object-fit: cover; }
+        .search-info strong { display: block; font-size: 1.1em; overflow: hidden; text-overflow: ellipsis; }
+        .search-info small { color: var(--muted-text-color); font-size: 0.9em; }
+
+        /* --- Player Section (Audio Only) --- */
+        .player-area {
+            margin-top: 30px; padding: 25px 15px;
+            background: linear-gradient(135deg, #1f1f1f, #121212);
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 30px var(--shadow-color);
+            text-align: center;
+        }
+
+        /* --- Now Playing Card --- */
+        #nowPlayingCard { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+        #currentThumbnail {
+            width: 80%; max-width: 250px; height: auto; aspect-ratio: 1 / 1;
+            border-radius: 8px; object-fit: cover; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+            margin-bottom: 25px;
+        }
+        #currentTitle { font-size: 1.6em; font-weight: 800; margin-bottom: 5px; }
+        #currentChannel { font-size: 1.1em; color: var(--muted-text-color); margin-bottom: 20px; }
+
+        /* --- Progress Bar --- */
+        .progress-container { width: 100%; margin: 0 auto 20px; display: flex; align-items: center; gap: 10px; }
+        #currentTime, #durationTime { color: var(--muted-text-color); font-size: 0.8em; width: 35px; text-align: center; }
+        #progressBar { flex-grow: 1; height: 4px; background: #404040; border-radius: 2px; cursor: pointer; position: relative; }
+        #progress { height: 100%; width: 0%; background: var(--primary-color); border-radius: 2px; transition: width 0.1s linear; }
+
+        /* --- Controls --- */
+        .controls { display: flex; justify-content: center; align-items: center; gap: 35px; margin-top: 25px; }
+        .control-button { background: none; border: none; cursor: pointer; color: var(--control-color); transition: color 0.15s; padding: 10px; font-size: 1.5em; }
+        #playPauseButton { font-size: 2.5em; color: var(--primary-color); }
+        .control-button:hover { color: var(--primary-color); }
+    </style>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script>
+      var tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    </script>
+
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎶 Group Audio Sync</h1>
+            <p>Select a track to start synchronized audio playback.</p>
+        </header>
+        
+        <div class="search-section" id="searchSection">
+            <div class="search-container">
+                <input type="text" id="searchQuery" placeholder="Search for songs, albums, or artists..." />
+                <button id="searchButton">🔍</button>
+            </div>
+            <div id="searchResults">
+                <p style="text-align:center; padding: 20px;">Type above to search for songs.</p>
+            </div>
+        </div>
+
+        <div class="player-area" id="playerArea" style="display: none;">
+             
+             <div id="youtubePlayer" style="height: 1px; width: 1px; visibility: hidden; position: absolute;"></div>
+             
+             <div id="nowPlayingCard">
+                 <img id="currentThumbnail" src="" alt="Now Playing" id="currentThumbnail">
+                 <strong id="currentTitle">Ready...</strong>
+                 <small id="currentChannel">Search and select a song.</small>
+             </div>
+
+             <div class="progress-container">
+                 <span id="currentTime">0:00</span>
+                 <div id="progressBar">
+                     <div id="progress"></div>
+                 </div>
+                 <span id="durationTime">0:00</span>
+             </div>
+
+             <div class="controls">
+                 <button class="control-button" id="backwardButton"><i class="fas fa-backward"></i></button>
+                 <button class="control-button" id="playPauseButton"><i class="fas fa-play"></i></button>
+                 <button class="control-button" id="forwardButton"><i class="fas fa-forward"></i></button>
+             </div>
+        </div>
+        
+        <div id="status-message">Connecting to sync server...</div>
+    </div>
+
+    <script>
+        // --- Global Variables and Setup ---
+        const statusMessage = document.getElementById('status-message');
+        const searchButton = document.getElementById('searchButton');
+        const searchQueryInput = document.getElementById('searchQuery');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const playerArea = document.getElementById('playerArea');
+        const searchSection = document.getElementById('searchSection');
+        
+        // UI Elements
+        const currentThumbnail = document.getElementById('currentThumbnail');
+        const currentTitle = document.getElementById('currentTitle');
+        const currentChannel = document.getElementById('currentChannel');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const backwardButton = document.getElementById('backwardButton');
+        const forwardButton = document.getElementById('forwardButton');
+        const progressBar = document.getElementById('progressBar');
+        const progress = document.getElementById('progress');
+        const currentTimeSpan = document.getElementById('currentTime');
+        const durationTimeSpan = document.getElementById('durationTime');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const chat_id = urlParams.get('chat_id'); // CRITICAL: Getting chat_id from URL
+
+        // FIX: Update this with your Render Backend URL
+        const BACKEND_BASE_URL = "https://music-bva7.onrender.com"; 
+        
+        let currentVideoId = null; 
+        let player;
+        let isReady = false;
+        let wakeLock = null;
+        const SEEK_JUMP = 10; 
+        const SEEK_THRESHOLD = 2; 
+
+        const socket = io(BACKEND_BASE_URL, { transports: ['websocket', 'polling'] });
+        let progressInterval; 
+        
+        // --- Utility Functions ---
+        const formatTime = (seconds) => {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+        };
+
+        // --- Wakelock Logic (Background Fix) ---
+        const requestWakeLock = async () => {
+          if ('wakeLock' in navigator) {
+            if (wakeLock) return;
+            try {
+              wakeLock = await navigator.wakeLock.request('screen');
+              console.log('Wake Lock is active');
+            } catch (err) {
+              console.error(`Wakelock Error: ${err.message}`);
+            }
+          }
+        };
+        const releaseWakeLock = () => {
+            if (wakeLock) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+        };
+
+        // --- Progress Bar Update ---
+        const startProgressInterval = () => {
+            if (progressInterval) clearInterval(progressInterval);
+            progressInterval = setInterval(() => {
+                if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+                    const current = player.getCurrentTime();
+                    const duration = player.getDuration();
+                    const percent = (current / duration) * 100;
+                    
+                    progress.style.width = `${percent}%`;
+                    currentTimeSpan.textContent = formatTime(current);
+                    durationTimeSpan.textContent = formatTime(duration);
+                }
+            }, 500);
+        };
+        
+        // --- Player Controls ---
+        const togglePlayPause = () => {
+            if (!player || !currentVideoId) return;
+
+            if (player.getPlayerState() === YT.PlayerState.PLAYING) {
+                player.pauseVideo();
+            } else {
+                player.playVideo();
+            }
+        };
+
+        const seekControl = (seconds) => {
+            if (!player || !currentVideoId) return;
+            const newTime = Math.max(0, player.getCurrentTime() + seconds);
+            player.seekTo(newTime, true);
+            
+            const action = player.getPlayerState() === YT.PlayerState.PLAYING ? 'play' : 'pause';
+            sendControl(action, newTime); 
+        };
+
+        // Progress bar click for seeking
+        progressBar.onclick = (e) => {
+            if (!player || !currentVideoId) return;
+            const rect = progressBar.getBoundingClientRect();
+            const clickPosition = e.clientX - rect.left;
+            const percent = clickPosition / rect.width;
+            const duration = player.getDuration();
+            const newTime = duration * percent;
+
+            player.seekTo(newTime, true);
+            
+            const action = player.getPlayerState() === YT.PlayerState.PLAYING ? 'play' : 'pause';
+            sendControl(action, newTime);
+        };
+
+
+        // --- Event Listeners for Custom Controls ---
+        playPauseButton.onclick = togglePlayPause;
+        backwardButton.onclick = () => seekControl(-SEEK_JUMP);
+        forwardButton.onclick = () => seekControl(SEEK_JUMP);
+
+
+        // **********************************************
+        // ********* YouTube Player Functions ***********
+        // **********************************************
+
+        function onYouTubeIframeAPIReady() {
+            isReady = true;
+            statusMessage.textContent = "YouTube API ready. Connecting...";
+        }
+
+        function loadPlayer(videoId) {
+            currentVideoId = videoId;
+            requestWakeLock(); // Activate Wakelock
+
+            if (player) {
+                player.loadVideoById(videoId);
+            } else {
+                player = new YT.Player('youtubePlayer', {
+                    videoId: videoId,
+                    playerVars: {
+                        'controls': 1, 'rel': 0, 'showinfo': 0, 
+                        'modestbranding': 1, 'fs': 0, 'autoplay': 1, 
+                        'disablekb': 1,
+                    },
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
+                    }
+                });
+            }
+             
+            searchSection.style.display = 'none';
+            playerArea.style.display = 'block';
+        }
+
+
+        function onPlayerReady(event) {
+            statusMessage.textContent = "Player ready. Starting sync.";
+            event.target.setVolume(100); 
+            startProgressInterval(); 
+            
+            if (player) {
+                durationTimeSpan.textContent = formatTime(player.getDuration()); 
+            }
+
+            if (socket.connected && chat_id) {
+                 socket.emit('join_group', { chat_id: chat_id });
+            }
+        }
+
+        function onPlayerStateChange(event) {
+            const currentState = event.data;
+            const currentTime = player.getCurrentTime();
+
+            // Update Play/Pause Button Icon
+            if (currentState === YT.PlayerState.PLAYING) {
+                playPauseButton.innerHTML = '<i class="fas fa-pause"></i>';
+                sendControl('play', currentTime);
+            } else if (currentState === YT.PlayerState.PAUSED || currentState === YT.PlayerState.BUFFERING) {
+                playPauseButton.innerHTML = '<i class="fas fa-play"></i>';
+                sendControl('pause', currentTime);
+            } else if (currentState === YT.PlayerState.ENDED) {
+                playPauseButton.innerHTML = '<i class="fas fa-redo"></i>';
+                statusMessage.textContent = "Playback ended. Click play to restart.";
+            }
+        }
+        
+        const sendControl = (action, time) => {
+            if (!chat_id) {
+                 statusMessage.textContent = "Error: Cannot sync. Chat ID is missing!";
+                 return;
+            }
+            socket.emit('control_stream', {
+                chat_id: chat_id, 
+                action: action,
+                time: time,
+                video_id: currentVideoId 
+            });
+        };
+
+
+        // **********************************************
+        // ********* SEARCH & UI LOGIC ***********
+        // **********************************************
+
+        searchButton.onclick = () => {
+            const query = searchQueryInput.value.trim();
+            if (query.length < 3) {
+                searchResultsDiv.innerHTML = '<p style="color:red; text-align:center; padding: 20px;">Enter at least 3 characters to search.</p>';
+                return;
+            }
+            statusMessage.textContent = `Searching for "${query}"...`;
+            fetchResults(query);
+        };
+
+        function fetchResults(query) {
+            const searchUrl = `${BACKEND_BASE_URL}/search-youtube?q=${encodeURIComponent(query)}`;
+            
+            fetch(searchUrl)
+                .then(response => {
+                    if (!response.ok) { return response.json().then(err => Promise.reject(err.error)); }
+                    return response.json();
+                })
+                .then(data => {
+                    displayResults(data.results);
+                    statusMessage.textContent = data.results.length === 0 ? 'No results found.' : `${data.results.length} results found. Select a song.`;
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    let displayError = error instanceof TypeError ? "Network connection or CORS error." : error;
+                    searchResultsDiv.innerHTML = `<p style="color:red; text-align:center; padding: 20px;">Search failed: ${displayError}.</p>`;
+                    statusMessage.textContent = 'Search failed (Check Backend/CORS).';
+                });
+        }
+
+        function displayResults(results) {
+            searchResultsDiv.innerHTML = '';
+            if (results.length === 0) { searchResultsDiv.innerHTML = '<p style="text-align:center; padding: 20px;">No results found.</p>'; return; }
+
+            results.forEach(item => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'search-item';
+                resultItem.innerHTML = `
+                    <img src="${item.thumbnail}" alt="${item.title}">
+                    <div class="search-info">
+                        <strong>${item.title}</strong>
+                        <small>${item.channel}</small>
+                    </div>
+                `;
+                resultItem.onclick = () => {
+                    loadNewVideo(item.id, item.title, item.channel, item.thumbnail); 
+                };
+                searchResultsDiv.appendChild(resultItem);
+            });
+        }
+
+        function loadNewVideo(videoId, title, channel, thumbnail) {
+             currentVideoId = videoId;
+             if (!player) { loadPlayer(videoId); } else { player.loadVideoById(videoId); }
+             
+             // UI Update
+             currentThumbnail.src = thumbnail;
+             currentTitle.textContent = title;
+             currentChannel.textContent = channel;
+             
+             searchSection.style.display = 'none';
+             playerArea.style.display = 'block';
+
+             statusMessage.textContent = `Now playing: ${title}. Syncing...`;
+             sendControl('play', 0); // Start playback and sync
+        }
+
+        // **********************************************
+        // ********* SocketIO Sync Logic ***********
+        // **********************************************
+        
+        socket.on('connect', () => {
+            statusMessage.textContent = "Connected to sync server. Ready.";
+            if (chat_id) { socket.emit('join_group', { chat_id: chat_id }); }
+            else { statusMessage.textContent = "Warning: Chat ID missing. Sync will not work."; }
+        });
+
+        socket.on('sync_control', (data) => {
+            if (!isReady || !player) return;
+
+            const action = data.action;
+            const time = data.time;
+            const receivedVideoId = data.video_id; 
+
+            // If the group changed the song
+            if (receivedVideoId && receivedVideoId !== currentVideoId) {
+                loadPlayer(receivedVideoId); 
+            }
+            
+            const currentTime = player.getCurrentTime();
+            const timeDifference = Math.abs(currentTime - time); 
+
+            if (action === 'play') {
+                if (timeDifference > SEEK_THRESHOLD) { player.seekTo(time, true); } 
+                if (player.getPlayerState() !== YT.PlayerState.PLAYING) { player.playVideo(); }
+                statusMessage.textContent = `Synced: Playing from ${formatTime(time)}`;
+            } else if (action === 'pause') {
+                if (player.getPlayerState() !== YT.PlayerState.PAUSED) { player.pauseVideo(); }
+                if (timeDifference > SEEK_THRESHOLD) { player.seekTo(time, true); } 
+                statusMessage.textContent = `Synced: Paused at ${formatTime(time)}`;
+            }
+        });
+        
+        // --- TWA Initialization ---
+        window.onload = function() {
+             if (window.Telegram && window.Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+                Telegram.WebApp.enableClosingConfirmation(); 
+                
+                Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
+                    releaseWakeLock();
+                    Telegram.WebApp.close(); 
+                });
+                
+                requestWakeLock(); 
+             }
+        };
+    </script>
+</body>
+</html>
