@@ -5,14 +5,14 @@ from typing import Optional
 
 # Flask is used for routing (ASGI compatibility needed)
 from flask import Flask, request, jsonify, abort 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+# FIX: WebAppInfo has been added here
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters, 
     ContextTypes, Application
 )
 from dotenv import load_dotenv
 import requests 
-# CRITICAL FIX: Imported for ASGI compatibility
 from asgiref.wsgi import WsgiToAsgi 
 
 # Load environment variables
@@ -45,6 +45,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     await update.message.reply_text("Welcome! Type `/play` to start the group music player.")
 
+# FIX APPLIED HERE: Using WebAppInfo instead of dict
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /play command and sends the Web App link."""
     if not RENDER_FRONTEND_URL:
@@ -54,10 +55,13 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}&mode=search"
     
+    # CRITICAL FIX: The button type was invalid. Use WebAppInfo object.
+    web_app_info = WebAppInfo(url=player_url)
+    
     keyboard = [[
         InlineKeyboardButton(
             "▶️ Search and Play Group Music", 
-            web_app={"url": player_url}
+            web_app=web_app_info # Pass the WebAppInfo object here
         )
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -127,15 +131,10 @@ async def telegram_webhook():
 
     if request.method == "POST":
         try:
-            # FIX: request.get_json() is synchronous in Flask, so 'await' is removed.
             request_data = request.get_json(force=True) 
-            
             update = Update.de_json(request_data, application.bot) 
-            
-            # Process the update using PTB's async method
             await application.process_update(update) 
-            
-            return 'ok' # Required 200 OK response for Telegram
+            return 'ok' 
         except Exception as e:
             logger.error(f"Error processing update: {e}", exc_info=True)
             return jsonify({'status': 'error', 'message': 'Update processing failed'}), 500
@@ -199,7 +198,6 @@ async def health_check():
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
-# Uvicorn अब 'app:asgi_app' को लोड करेगा।
 asgi_app = WsgiToAsgi(app) 
 
 # ------------------------------------------------------------------
