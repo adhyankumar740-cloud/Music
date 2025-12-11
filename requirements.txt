@@ -3,4 +3,5 @@ python-telegram-bot[webhooks]
 requests
 python-dotenv  
 eventlet
-flask-socketio
+Flask-SocketIO
+urllib3
