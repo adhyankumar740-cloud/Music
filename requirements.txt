@@ -1,7 +1,7 @@
 flask[async]
 python-telegram-bot[webhooks]
-requests
+requests==2.31.0
+urllib3==2.0.7
 python-dotenv  
 eventlet
 Flask-SocketIO
-urllib3
