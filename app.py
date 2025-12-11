@@ -3,7 +3,7 @@ import logging
 import asyncio 
 from typing import Optional
 
-# Flask is used for routing
+# Flask is used for routing (ASGI compatibility needed)
 from flask import Flask, request, jsonify, abort 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 import requests 
-# New import for ASGI compatibility
+# CRITICAL FIX: Imported for ASGI compatibility
 from asgiref.wsgi import WsgiToAsgi 
 
 # Load environment variables
@@ -121,16 +121,19 @@ async def initialize_ptb_application():
 async def telegram_webhook(): 
     """Handles incoming Telegram updates and passes them to PTB."""
     if not application:
-        # Check and attempt to initialize if the bot wasn't ready during startup
         await initialize_ptb_application() 
         if not application:
              return 'Bot not ready', 503
 
     if request.method == "POST":
         try:
-            # Uvicorn handles async Flask routes
-            update = Update.de_json(await request.get_json(force=True), application.bot) 
-            await application.process_update(update) # Await PTB function directly
+            # FIX: request.get_json() is synchronous in Flask, so 'await' is removed.
+            request_data = request.get_json(force=True) 
+            
+            update = Update.de_json(request_data, application.bot) 
+            
+            # Process the update using PTB's async method
+            await application.process_update(update) 
             
             return 'ok' # Required 200 OK response for Telegram
         except Exception as e:
@@ -161,7 +164,6 @@ def search_youtube():
     }
     
     try:
-        # requests is synchronous, but Uvicorn manages thread blocking
         response = requests.get(YOUTUBE_SEARCH_URL, params=params) 
         response.raise_for_status() 
         data = response.json()
@@ -192,16 +194,13 @@ async def health_check():
         await initialize_ptb_application() 
     return "Music Bot Backend is alive and ready!", 200
 
-# Uvicorn handles startup events, and this ensures initialization runs on the first request
-# (or when health_check is hit)
-
 # ------------------------------------------------------------------
-# --- 6. ASGI WRAPPER (CRITICAL FIX FOR TYPERROR) ---
+# --- 6. ASGI WRAPPER (CRITICAL FIX) ---
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
-# Start command अब 'app:asgi_app' का उपयोग करेगा।
-asgi_app = WsgiToAsgi(app)
+# Uvicorn अब 'app:asgi_app' को लोड करेगा।
+asgi_app = WsgiToAsgi(app) 
 
 # ------------------------------------------------------------------
 # --- 7. LOCAL DEVELOPMENT ONLY ---
@@ -210,7 +209,5 @@ asgi_app = WsgiToAsgi(app)
 if __name__ == '__main__':
     # For local development/testing only
     PORT = int(os.environ.get('PORT', 8000))
-    # Note: local run will not handle async routes/initialization correctly without uvicorn
-    # But it allows the file to be executed.
     logger.warning("Running with Flask built-in server (Local Only). Use Uvicorn for production.")
     app.run(host='0.0.0.0', port=PORT, debug=True)
