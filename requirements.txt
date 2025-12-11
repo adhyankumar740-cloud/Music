@@ -2,5 +2,6 @@ flask[async]
 python-telegram-bot[webhooks]
 httpx
 python-dotenv  
-eventlet
 Flask-SocketIO
+uvicorn
+requests
