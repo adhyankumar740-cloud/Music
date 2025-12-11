@@ -5,7 +5,7 @@ from typing import Optional
 
 # Flask is used for routing (ASGI compatibility needed)
 from flask import Flask, request, jsonify, abort 
-# FIX: WebAppInfo has been added here
+# FIX: WebAppInfo is required for the InlineKeyboardButton with Web App
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters, 
@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 import requests 
+# CRITICAL FIX: Imported for ASGI compatibility
 from asgiref.wsgi import WsgiToAsgi 
 
 # Load environment variables
@@ -45,7 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     await update.message.reply_text("Welcome! Type `/play` to start the group music player.")
 
-# FIX APPLIED HERE: Using WebAppInfo instead of dict
+# FIX APPLIED: Using WebAppInfo
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /play command and sends the Web App link."""
     if not RENDER_FRONTEND_URL:
@@ -131,6 +132,7 @@ async def telegram_webhook():
 
     if request.method == "POST":
         try:
+            # FIX: request.get_json() is synchronous in Flask, so 'await' is removed.
             request_data = request.get_json(force=True) 
             update = Update.de_json(request_data, application.bot) 
             await application.process_update(update) 
@@ -194,11 +196,33 @@ async def health_check():
     return "Music Bot Backend is alive and ready!", 200
 
 # ------------------------------------------------------------------
-# --- 6. ASGI WRAPPER (CRITICAL FIX) ---
+# --- 6. ASGI WRAPPER (CRITICAL FIXES) ---
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
-asgi_app = WsgiToAsgi(app) 
+# This solves the first TypeError (missing start_response).
+flask_asgi_app = WsgiToAsgi(app) 
+
+# FIX: Custom ASGI application wrapper to filter out non-HTTP scopes (WebSockets)
+# This solves the 'WSGI wrapper received a non-HTTP scope' ValueError.
+async def application_asgi(scope, receive, send):
+    """
+    A custom ASGI application wrapper to filter out non-HTTP scopes 
+    that the WsgiToAsgi adapter cannot handle (specifically 'websocket' scopes).
+    """
+    if scope['type'] in ['http', 'lifespan']:
+        # Only pass HTTP and Lifespan scopes to the Flask/WSGI wrapper
+        await flask_asgi_app(scope, receive, send)
+    elif scope['type'] == 'websocket':
+        # Silently ignore WebSocket scopes to prevent the ValueError crash
+        logger.warning(f"Ignored non-HTTP scope type: {scope['type']}")
+        pass # Do nothing
+    # If other scopes exist, they will be handled by flask_asgi_app (default behavior)
+    else:
+        await flask_asgi_app(scope, receive, send)
+
+# Uvicorn will load this custom wrapper: app:application_asgi
+asgi_app = application_asgi 
 
 # ------------------------------------------------------------------
 # --- 7. LOCAL DEVELOPMENT ONLY ---
