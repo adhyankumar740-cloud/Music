@@ -3,7 +3,6 @@ import logging
 import asyncio 
 from typing import Optional
 
-# Flask is used for routing, Uvicorn (ASGI) will run the app
 from flask import Flask, request, jsonify, abort 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,7 +10,7 @@ from telegram.ext import (
     ContextTypes, Application
 )
 from dotenv import load_dotenv
-import requests # Used for synchronous API calls (YouTube Search)
+import requests 
 
 # Load environment variables
 load_dotenv()
@@ -24,43 +23,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Configuration (Environment Variables) ---
-# NOTE: Ensure these are set correctly on Render
 TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN")
 RENDER_FRONTEND_URL: Optional[str] = os.getenv('RENDER_FRONTEND_URL') 
 RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL") 
 YOUTUBE_API_KEY: Optional[str] = os.getenv("YOUTUBE_API_KEY") 
 
-# The Webhook path uses the token for a simple, unique URL
 WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' if TELEGRAM_BOT_TOKEN else '/webhook/dummy_token'
 
 # --- Global Objects ---
 app = Flask(__name__)
 application: Optional[Application] = None
 
-# ------------------------------------------------------------------
-# --- 1. BOT HANDLERS (Async) ---
-# ------------------------------------------------------------------
-
+# --- BOT HANDLERS ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /start command."""
     await update.message.reply_text("Welcome! Type `/play` to start the group music player.")
 
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /play command and sends the Web App link."""
     if not RENDER_FRONTEND_URL:
         await update.message.reply_text('Error: RENDER_FRONTEND_URL environment variable is not set.')
         return
         
     chat_id = update.effective_chat.id
     player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}&mode=search"
-    
-    # Inline keyboard with Web App button
-    keyboard = [[
-        InlineKeyboardButton(
-            "▶️ Search and Play Group Music", 
-            web_app={"url": player_url}
-        )
-    ]]
+    keyboard = [[InlineKeyboardButton("▶️ Search and Play Group Music", web_app={"url": player_url})]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
@@ -69,15 +54,12 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Responds to non-command text messages."""
     await update.message.reply_text("I am programmed to play music only. Please use `/play`.")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Logs errors caused by Updates."""
     logger.error("Exception while handling an update:", exc_info=context.error)
 
 def setup_handlers(app_ptb: Application):
-    """Registers all command and message handlers."""
     logger.info("Setting up Music Bot handlers...")
     app_ptb.add_handler(CommandHandler("start", start_command))
     app_ptb.add_handler(CommandHandler("play", play_command))
@@ -85,12 +67,8 @@ def setup_handlers(app_ptb: Application):
     app_ptb.add_error_handler(error_handler)
     logger.info("All handlers set up.")
 
-# ------------------------------------------------------------------
-# --- 2. PTB INITIALIZATION (Async) ---
-# ------------------------------------------------------------------
-
+# --- PTB Initialization ---
 async def initialize_ptb_application():
-    """Initializes the PTB Application, registers handlers, and sets the webhook."""
     global application
     if application: return
     
@@ -105,65 +83,45 @@ async def initialize_ptb_application():
     webhook_url = f'{RENDER_EXTERNAL_URL}{WEBHOOK_PATH}'
     await application.initialize() 
     
-    # Set Webhook URL
     success = await application.bot.set_webhook(url=webhook_url)
     if success:
         logger.info(f"Auto-Webhook successfully set to {webhook_url}")
     else:
         logger.error("Auto-Webhook setting failed.")
     
-    # Start the PTB background tasks 
     await application.start() 
     logger.info("PTB Application started successfully.")
 
-# ------------------------------------------------------------------
-# --- 3. WEBHOOK ENDPOINT (Async) ---
-# ------------------------------------------------------------------
-
+# --- WEBHOOK ENDPOINT (The Clean Async Fix) ---
 @app.route(WEBHOOK_PATH, methods=['POST'])
 async def telegram_webhook(): 
-    """Handles incoming Telegram updates and passes them to PTB."""
     if not application:
-        return 'Bot not ready', 503
+        # Check and attempt to initialize if the bot wasn't ready during startup
+        await initialize_ptb_application() 
+        if not application:
+             return 'Bot not ready', 503
 
     if request.method == "POST":
         try:
-            # Get JSON data and create an Update object
             update = Update.de_json(await request.get_json(force=True), application.bot) 
-            
-            # Process the update using PTB's async method
             await application.process_update(update) 
-            
-            return 'ok' # Required 200 OK response for Telegram
+            return 'ok'
         except Exception as e:
             logger.error(f"Error processing update: {e}", exc_info=True)
             return jsonify({'status': 'error', 'message': 'Update processing failed'}), 500
     return abort(400)
 
-# ------------------------------------------------------------------
-# --- 4. YOUTUBE DATA API SEARCH ENDPOINT (Synchronous) ---
-# ------------------------------------------------------------------
-
+# --- YOUTUBE DATA API SEARCH ENDPOINT (Synchronous, handled by Uvicorn) ---
 @app.route('/search-youtube', methods=['GET'])
 def search_youtube():
-    """Handles YouTube search queries using the Data API."""
     query = request.args.get('q')
-    if not query:
-        return jsonify({'error': 'Query parameter "q" is required'}), 400
-    if not YOUTUBE_API_KEY:
-        return jsonify({'error': 'YOUTUBE_API_KEY is not configured on the server'}), 500
+    if not query or not YOUTUBE_API_KEY:
+        return jsonify({'error': 'Required parameters missing'}), 400
 
     YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        'part': 'snippet',
-        'q': query,
-        'key': YOUTUBE_API_KEY,
-        'type': 'video',
-        'maxResults': 5 
-    }
+    params = {'part': 'snippet', 'q': query, 'key': YOUTUBE_API_KEY, 'type': 'video', 'maxResults': 5}
     
     try:
-        # requests is synchronous, but Uvicorn manages thread blocking
         response = requests.get(YOUTUBE_SEARCH_URL, params=params) 
         response.raise_for_status() 
         data = response.json()
@@ -183,26 +141,19 @@ def search_youtube():
         logger.error(f"YouTube API Error: {e}", exc_info=True)
         return jsonify({'error': f'Failed to search YouTube: {e}'}), 500
 
-# ------------------------------------------------------------------
-# --- 5. SERVER STARTUP & HEALTH CHECK ---
-# ------------------------------------------------------------------
-
+# --- SERVER STARTUP & HEALTH CHECK ---
 @app.route('/')
 async def health_check():
-    """Simple health check and attempts to initialize the bot if needed."""
     if not application:
         await initialize_ptb_application() 
     return "Music Bot Backend is alive and ready!", 200
 
-# Initialization ensures PTB starts when Uvicorn starts
-@app.before_first_request
-async def startup():
-    """Runs the initialization code before the first request is processed."""
-    await initialize_ptb_application()
+# IMPORTANT FIX: Removed the deprecated @app.before_first_request decorator. 
+# Uvicorn (ASGI) server automatically handles startup events, and our routes 
+# (like telegram_webhook and health_check) call initialize_ptb_application() if needed.
 
-# If running locally (not with Uvicorn)
+# This block is for local testing only; Uvicorn handles the production run.
 if __name__ == '__main__':
-    # For local development/testing only
-    asyncio.run(initialize_ptb_application()) 
+    # FIX: Removed asyncio.run() here to prevent conflicts with Flask's built-in server.
     PORT = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=PORT, debug=True)
