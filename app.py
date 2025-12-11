@@ -1,9 +1,23 @@
 import os
 import logging
 import asyncio
-import threading # NEW: Threading Lock के लिए
+import threading 
 import re 
 import requests 
+
+# --- EVENTLET INTEGRATION (NEW/FIXED) ---
+# Flask-SocketIO को WebSockets को कुशलतापूर्वक हैंडल करने के लिए 
+# eventlet का उपयोग करने के लिए इसे सबसे ऊपर रखें।
+try:
+    import eventlet
+    # Python की ब्लॉकिंग I/O फ़ंक्शंस को नॉन-ब्लॉकिंग I/O से बदलें
+    eventlet.monkey_patch() 
+    ASYNC_MODE = 'eventlet'
+except ImportError:
+    ASYNC_MODE = 'threading'
+    print("Warning: eventlet not installed. Falling back to threading mode for SocketIO.")
+# ------------------------------------------
+
 from flask import Flask, send_file, request, jsonify, abort
 from flask_socketio import SocketIO, join_room, emit, disconnect
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -27,17 +41,18 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 RENDER_FRONTEND_URL = os.getenv('RENDER_FRONTEND_URL') 
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL") 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") # YouTube API Key for Search
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") 
 
 WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' 
 
 # --- Global Objects ---
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*", logger=True, engineio_logger=True)
+# Flask-SocketIO initialization: eventlet/threading mode का उपयोग करें
+socketio = SocketIO(app, async_mode=ASYNC_MODE, cors_allowed_origins="*", logger=True, engineio_logger=True)
 
 application = None
 bot = None
-initialization_lock = threading.Lock() # NEW: Initalization Lock
+initialization_lock = threading.Lock() 
 
 # ------------------------------------------------------------------
 # --- BOT HANDLERS ---
@@ -82,13 +97,12 @@ def setup_handlers(app_ptb: Application):
     logger.info("All handlers set up.")
 
 # ------------------------------------------------------------------
-# --- PTB Initialization with Threading Lock (FIXED) ---
+# --- PTB Initialization with Threading Lock ---
 # ------------------------------------------------------------------
 
 def initialize_ptb_application():
     global application, bot
     
-    # थ्रेडिंग लॉक का उपयोग करें
     with initialization_lock:
         if application: 
             return
@@ -106,10 +120,8 @@ def initialize_ptb_application():
         
         try:
             async def init_ptb_and_set_webhook():
-                # application.initialize() को पूरा होने दें
                 await application.initialize() 
                 
-                # Webhook सेट करना
                 if RENDER_EXTERNAL_URL:
                      success = await bot.set_webhook(url=webhook_url)
                      if success:
@@ -117,8 +129,7 @@ def initialize_ptb_application():
                      else:
                          logger.error("Auto-Webhook setting failed.")
                 
-            # Asynchronous फ़ंक्शन को Sync context में चलाएँ
-            # Note: loop.run_until_complete() को यहां ठीक से इस्तेमाल किया गया है
+            # Asynchronous फ़ंक्शन को Sync context में चलाएँ (eventlet/threading के लिए सुरक्षित)
             loop = asyncio.get_event_loop()
             loop.run_until_complete(init_ptb_and_set_webhook()) 
             
@@ -128,7 +139,7 @@ def initialize_ptb_application():
             application = None; bot = None
 
 # ------------------------------------------------------------------
-# --- WEBHOOK ENDPOINT (FIXED: Handling Async in Sync Context) ---
+# --- WEBHOOK ENDPOINT (Async in Sync Context FIX) ---
 # ------------------------------------------------------------------
 
 @app.route(WEBHOOK_PATH, methods=['POST'])
@@ -231,7 +242,7 @@ def health_check():
     return "Music Bot Backend is alive and ready for sync and search!", 200
 
 # ------------------------------------------------------------------
-# --- MAIN RUN (FIXED: Initialization called once) ---
+# --- MAIN RUN (USING socketio.run instead of Gunicorn) ---
 # ------------------------------------------------------------------
 
 if __name__ == '__main__':
@@ -239,5 +250,7 @@ if __name__ == '__main__':
     initialize_ptb_application() 
     
     PORT = int(os.environ.get('PORT', 8000))
-    # Flask-SocketIO को चलाएँ
+    
+    # Gunicorn के बजाय socketio.run का उपयोग करें, यह eventlet/threading मोड में चलेगा
+    logger.info(f"Starting server in {ASYNC_MODE} mode on port {PORT}...")
     socketio.run(app, host='0.0.0.0', port=PORT, debug=False)
