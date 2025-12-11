@@ -5,7 +5,8 @@ from typing import Optional
 
 # Flask is used for routing (ASGI compatibility needed)
 from flask import Flask, request, jsonify, abort 
-# FIX: WebAppInfo is required for the InlineKeyboardButton with Web App
+# New Import: CORS is needed for the Web App to communicate with the search API
+from flask_cors import CORS 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, filters, 
@@ -13,7 +14,6 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 import requests 
-# CRITICAL FIX: Imported for ASGI compatibility
 from asgiref.wsgi import WsgiToAsgi 
 
 # Load environment variables
@@ -36,6 +36,8 @@ WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' if TELEGRAM_BOT_TOKEN else '/web
 
 # --- Global Objects ---
 app = Flask(__name__)
+# FIX: Enable CORS for all origins and methods
+CORS(app) 
 application: Optional[Application] = None
 
 # ------------------------------------------------------------------
@@ -46,7 +48,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
     await update.message.reply_text("Welcome! Type `/play` to start the group music player.")
 
-# FIX APPLIED: Using WebAppInfo
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /play command and sends the Web App link."""
     if not RENDER_FRONTEND_URL:
@@ -54,15 +55,17 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     chat_id = update.effective_chat.id
+    # Note: Telegram Web Apps do not expose the chat_id in the URL by default for security, 
+    # but the URL structure is okay for testing.
     player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}&mode=search"
     
-    # CRITICAL FIX: The button type was invalid. Use WebAppInfo object.
+    # FIX: Use WebAppInfo object to resolve Button_type_invalid error
     web_app_info = WebAppInfo(url=player_url)
     
     keyboard = [[
         InlineKeyboardButton(
             "▶️ Search and Play Group Music", 
-            web_app=web_app_info # Pass the WebAppInfo object here
+            web_app=web_app_info 
         )
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -200,24 +203,19 @@ async def health_check():
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
-# This solves the first TypeError (missing start_response).
 flask_asgi_app = WsgiToAsgi(app) 
 
 # FIX: Custom ASGI application wrapper to filter out non-HTTP scopes (WebSockets)
-# This solves the 'WSGI wrapper received a non-HTTP scope' ValueError.
 async def application_asgi(scope, receive, send):
     """
     A custom ASGI application wrapper to filter out non-HTTP scopes 
     that the WsgiToAsgi adapter cannot handle (specifically 'websocket' scopes).
     """
     if scope['type'] in ['http', 'lifespan']:
-        # Only pass HTTP and Lifespan scopes to the Flask/WSGI wrapper
         await flask_asgi_app(scope, receive, send)
     elif scope['type'] == 'websocket':
-        # Silently ignore WebSocket scopes to prevent the ValueError crash
         logger.warning(f"Ignored non-HTTP scope type: {scope['type']}")
-        pass # Do nothing
-    # If other scopes exist, they will be handled by flask_asgi_app (default behavior)
+        pass 
     else:
         await flask_asgi_app(scope, receive, send)
 
