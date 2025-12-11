@@ -6,3 +6,4 @@ Flask-SocketIO
 uvicorn
 requests
 asgiref
+flask-cors
