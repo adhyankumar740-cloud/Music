@@ -5,3 +5,4 @@ python-dotenv
 Flask-SocketIO
 uvicorn
 requests
+asgiref
