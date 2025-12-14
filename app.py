@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration (Environment Variables) ---
 TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN")
-RENDER_FRONTEND_URL: Optional[str] = os.getenv('RENDER_FRONTEND_URL') 
-RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL") 
+RENDER_FRONTEND_URL: Optional[str] = os.getenv('RENDER_FRONTEND_URL') # Your Mini App URL
+RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL") # Your Backend URL
 YOUTUBE_API_KEY: Optional[str] = os.getenv("YOUTUBE_API_KEY") 
 
 WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' if TELEGRAM_BOT_TOKEN else '/webhook/dummy_token'
@@ -56,27 +56,29 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     chat_id = update.effective_chat.id
-    # Mini App URL for search interface
-    player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}&mode=search"
+    # Mini App URL for search interface, passing chat_id
+    player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}"
     
     web_app_info = WebAppInfo(url=player_url)
     
     keyboard = [[
         InlineKeyboardButton(
-            "▶️ Search and Play Group Music", 
+            "▶️ Open Music Search", 
             web_app=web_app_info 
         )
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.effective_message.reply_text(
-        'Open the player to search and sync music with your group:', 
+    # FIX: Using context.bot.send_message to prevent Button_type_invalid error in groups
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text='Open the player to search and post a track for group playback:', 
         reply_markup=reply_markup
     )
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responds to non-command text messages."""
-    # FIX: Only reply in Private Chats (DMs) to prevent group spam.
+    # Only reply in Private Chats (DMs) to prevent group spam.
     if update.effective_chat.type == 'private':
         await update.message.reply_text("I am programmed to play music only. Please use `/play`.")
         
@@ -149,7 +151,6 @@ async def telegram_webhook():
 @app.route('/search-youtube', methods=['GET'])
 def search_youtube():
     """Handles YouTube search queries using the Data API."""
-    # (Same code as before, no changes needed here)
     query = request.args.get('q')
     if not query:
         return jsonify({'error': 'Query parameter "q" is required'}), 400
@@ -187,28 +188,32 @@ def search_youtube():
 
 
 # ------------------------------------------------------------------
-# --- 4.5. NEW: TRACK POSTING ENDPOINT (Group Playback/Background Fix) ---
+# --- 4.5. TRACK POSTING ENDPOINT (Background Play Fix) ---
 # ------------------------------------------------------------------
 
 async def _send_track_message(chat_id, video_id, title):
-    """Internal function to send a Telegram message asynchronously."""
+    """
+    Internal function to send a Telegram message with the YouTube link.
+    This enables Telegram's native background player.
+    """
     if not application:
         await initialize_ptb_application()
     if not application:
         return False
 
     youtube_url = f"https://www.youtube.com/watch?v={video_id}"
-    message = f"🎶 **Playing Now**\n[{title}]({youtube_url})"
+    
+    # FIX: Using HTML parse mode for reliable link preview and easier formatting
+    message = f'🎶 <b>Now Playing in Group:</b>\n<a href="{youtube_url}">{title}</a>'
     
     try:
-        # Use send_message with parse_mode='MarkdownV2' for rich link previews
+        # Use send_message with parse_mode='HTML'
         await application.bot.send_message(
             chat_id=chat_id, 
             text=message, 
-            parse_mode='MarkdownV2',
-            # For better group integration, use an Inline Keyboard button to open Web App again
+            parse_mode='HTML', 
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Open Player", url=RENDER_FRONTEND_URL)
+                InlineKeyboardButton("Open Search Again", url=RENDER_FRONTEND_URL)
             ]])
         )
         return True
@@ -220,7 +225,6 @@ async def _send_track_message(chat_id, video_id, title):
 async def post_track_to_chat():
     """
     Accepts track info from the Web App and posts it to the group chat.
-    This allows Telegram to handle the YouTube link natively, enabling background play.
     """
     try:
         data = request.get_json()
@@ -231,7 +235,6 @@ async def post_track_to_chat():
         if not all([chat_id, video_id, title]):
             return jsonify({'error': 'Missing chat_id, video_id, or title'}), 400
 
-        # Run the async Telegram sending function
         success = await _send_track_message(chat_id, video_id, title)
 
         if success:
@@ -256,32 +259,24 @@ async def health_check():
     return "Music Bot Backend is alive and ready!", 200
 
 # ------------------------------------------------------------------
-# --- 6. ASGI WRAPPER (CRITICAL FIXES) ---
+# --- 6. ASGI WRAPPER ---
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
 flask_asgi_app = WsgiToAsgi(app) 
 
-# FIX: Custom ASGI application wrapper to filter out non-HTTP scopes (WebSockets)
 async def application_asgi(scope, receive, send):
-    """
-    A custom ASGI application wrapper to filter out non-HTTP scopes 
-    that the WsgiToAsgi adapter cannot handle (specifically 'websocket' scopes).
-    """
+    """Custom ASGI application wrapper."""
     if scope['type'] in ['http', 'lifespan']:
         await flask_asgi_app(scope, receive, send)
     elif scope['type'] == 'websocket':
+        # WebSockets are ignored as Flask does not natively support them
         logger.warning(f"Ignored non-HTTP scope type: {scope['type']}")
         pass 
     else:
         await flask_asgi_app(scope, receive, send)
 
-# Uvicorn will load this custom wrapper: app:application_asgi
 asgi_app = application_asgi 
-
-# ------------------------------------------------------------------
-# --- 7. LOCAL DEVELOPMENT ONLY ---
-# ------------------------------------------------------------------
 
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8000))
