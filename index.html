@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Group Sync Audio Player</title>
+    <title>Group Stream Starter</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -121,7 +121,7 @@
         .status-error { color: var(--error-color) !important; }
         .status-success { color: var(--success-color) !important; }
 
-        /* --- Player Area (Placeholder) --- */
+        /* --- Player Area (Confirmation/Posting) --- */
         .player-area {
             display: flex;
             flex-direction: column;
@@ -180,12 +180,12 @@
             <strong id="currentTitle" style="font-size: 1.5em;">Title</strong>
             <small id="currentChannel" style="font-size: 1em; margin-bottom: 20px;">Channel</small>
 
-            <p style="margin-bottom: 10px; color: var(--primary-color);">Click the button to post the link to the chat for everyone to play and sync!</p>
+            <p style="margin-bottom: 10px; color: var(--primary-color);">Click the button to post the link to the chat for everyone to play (with background support)!</p>
             
             <button class="btn-post-track" id="postTrackButton"><i class="fas fa-paper-plane"></i> Post to Group Chat</button>
             <button class="btn-post-track" style="background: #666; margin-top: 10px;" onclick="showSearch()"><i class="fas fa-undo"></i> Search Again</button>
 
-            </div>
+        </div>
         
         <div id="status-message">Loading Telegram Web App...</div>
     </div>
@@ -208,10 +208,10 @@
         const urlParams = new URLSearchParams(window.location.search);
         const chat_id = urlParams.get('chat_id'); // CRITICAL: Getting chat_id from URL
 
-        // FIX: Update this with your Render Backend URL
+        // TODO: REPLACE THIS WITH YOUR RENDER BACKEND URL (e.g., "https://your-backend-name.onrender.com")
         const BACKEND_BASE_URL = "https://music-bva7.onrender.com"; 
         
-        let selectedTrack = {}; // To hold the track info before posting
+        let selectedTrack = {}; 
         
         // --- Utility Functions ---
         const setStatus = (message, type = 'default') => {
@@ -246,7 +246,15 @@
             
             fetch(searchUrl)
                 .then(response => {
-                    if (!response.ok) { return response.json().then(err => Promise.reject(err.error)); }
+                    if (!response.ok) { 
+                        return response.json().then(err => {
+                            // Try to get error message from JSON response
+                            throw new Error(err.error || 'Unknown server error during search.');
+                        }).catch(() => {
+                            // If JSON parsing fails, use status text
+                            throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+                        }); 
+                    }
                     return response.json();
                 })
                 .then(data => {
@@ -255,7 +263,7 @@
                 })
                 .catch(error => {
                     console.error('Fetch error:', error);
-                    setStatus(`Search failed: ${error}`, 'error');
+                    setStatus(`Search failed: ${error.message || error}`, 'error');
                 });
         }
 
@@ -330,7 +338,13 @@
                 })
             })
             .then(response => {
-                if (!response.ok) { return response.json().then(err => Promise.reject(err.error)); }
+                if (!response.ok) { 
+                     return response.json().then(err => {
+                        throw new Error(err.error || 'Unknown server error during post.');
+                    }).catch(() => {
+                        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+                    });
+                }
                 return response.json();
             })
             .then(data => {
@@ -344,26 +358,25 @@
             })
             .catch(error => {
                 console.error('Post error:', error);
-                setStatus(`Failed to post track: ${error}`, 'error');
+                setStatus(`Failed to post track: ${error.message || error}`, 'error');
                 postTrackButton.disabled = false;
             });
         }
 
 
         // **********************************************
-        // ********* TWA Initialization & Cleanup *******
+        // ********* TWA Initialization *******
         // **********************************************
-        
-        // Remove Wakelock logic as we are relying on Telegram's native player now
         
         window.onload = function() {
               if (window.Telegram && window.Telegram.WebApp) {
                 Telegram.WebApp.ready();
                 Telegram.WebApp.expand();
-                Telegram.WebApp.enableClosingConfirmation(); // Keep this for user experience
                 
-                // New Main Button Logic: Only shows search again
-                Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
+                // Optional: Enable confirmation before closing
+                // Telegram.WebApp.enableClosingConfirmation(); 
+                
+                Telegram.WebApp.MainButton.setText("Close Search").show().onClick(function() {
                     Telegram.WebApp.close(); 
                 });
                 
@@ -379,4 +392,4 @@
         };
     </script>
 </body>
-</html>
+    </html>
