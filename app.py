@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration (Environment Variables) ---
 TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN")
 RENDER_FRONTEND_URL: Optional[str] = os.getenv('RENDER_FRONTEND_URL') # Your Mini App URL
-RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL") # Your Backend URL
+RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL") # Your Backend URL (e.g., https://your-name.onrender.com)
 YOUTUBE_API_KEY: Optional[str] = os.getenv("YOUTUBE_API_KEY") 
 
 WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' if TELEGRAM_BOT_TOKEN else '/webhook/dummy_token'
@@ -115,6 +115,14 @@ async def initialize_ptb_application():
     webhook_url = f'{RENDER_EXTERNAL_URL}{WEBHOOK_PATH}'
     await application.initialize() 
     
+    # Check current bot info (useful for logging)
+    try:
+        bot_info = await application.bot.get_me()
+        logger.info(f"Bot Identity: {bot_info.username}")
+    except Exception as e:
+        logger.error(f"Could not get bot info: {e}")
+
+    # Set Webhook
     success = await application.bot.set_webhook(url=webhook_url)
     if success:
         logger.info(f"Auto-Webhook successfully set to {webhook_url}")
@@ -129,6 +137,7 @@ async def initialize_ptb_application():
 async def telegram_webhook(): 
     """Handles incoming Telegram updates and passes them to PTB."""
     if not application:
+        # Attempt initialization if not ready (important for Render startup)
         await initialize_ptb_application() 
         if not application:
             return 'Bot not ready', 503
@@ -137,7 +146,8 @@ async def telegram_webhook():
         try:
             request_data = request.get_json(force=True) 
             update = Update.de_json(request_data, application.bot) 
-            await application.process_update(update) 
+            # Use asyncio.ensure_future or similar to process updates in the background
+            asyncio.create_task(application.process_update(update))
             return 'ok' 
         except Exception as e:
             logger.error(f"Error processing update: {e}", exc_info=True)
@@ -188,43 +198,67 @@ def search_youtube():
 
 
 # ------------------------------------------------------------------
-# --- 4.5. TRACK POSTING ENDPOINT (Background Play Fix) ---
+# --- 4.5. TRACK POSTING ENDPOINT (Group Audio Player FIX) ---
 # ------------------------------------------------------------------
 
 async def _send_track_message(chat_id, video_id, title):
     """
-    Internal function to send a Telegram message with the YouTube link.
-    This enables Telegram's native background player.
+    Sends the YouTube URL as streamable media using the Telegram API's 
+    sendVideo method (as it's the only one supporting external URLs for background play).
     """
+    global application
     if not application:
-        await initialize_ptb_application()
-    if not application:
+        await initialize_ptb_application() 
+    if not TELEGRAM_BOT_TOKEN or not application:
+        logger.error("CRITICAL: Bot not initialized or token missing.")
         return False
-
+        
     youtube_url = f"https://www.youtube.com/watch?v={video_id}"
     
-    # FIX: Using HTML parse mode for reliable link preview and easier formatting
-    message = f'🎶 <b>Now Playing in Group:</b>\n<a href="{youtube_url}">{title}</a>'
+    # Inline keyboard setup
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Open Search Again", url=RENDER_FRONTEND_URL)
+    ]])
+    # Encoding the reply markup using the application's utility
+    reply_markup_json = application.bot.encode_json(keyboard) 
+
+    # DIRECT TELEGRAM API CALL: Using sendVideo
+    TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+    
+    params = {
+        'chat_id': chat_id,
+        'video': youtube_url,
+        # Using HTML caption and an audio-focused icon
+        'caption': f'🎧 <b>Now Playing: {title}</b>',
+        'parse_mode': 'HTML',
+        'reply_markup': reply_markup_json,
+        
+        # Parameters to encourage audio-like card (though not guaranteed for YouTube links)
+        'supports_streaming': True,
+        'width': 1, 
+        'height': 1
+    }
     
     try:
-        # Use send_message with parse_mode='HTML'
-        await application.bot.send_message(
-            chat_id=chat_id, 
-            text=message, 
-            parse_mode='HTML', 
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Open Search Again", url=RENDER_FRONTEND_URL)
-            ]])
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send track message to chat {chat_id}: {e}")
+        # Use requests.post for synchronous HTTP call to the Telegram API
+        response = requests.post(TELEGRAM_API_URL, data=params)
+        response.raise_for_status() 
+        
+        response_data = response.json()
+        if response_data.get('ok'):
+            return True
+        else:
+            logger.error(f"Telegram API failed to send video: {response_data.get('description', 'Unknown API Error')}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to post track via sendVideo API: {e}")
         return False
 
 @app.route('/post-track-to-chat', methods=['POST'])
 async def post_track_to_chat():
     """
-    Accepts track info from the Web App and posts it to the group chat.
+    Endpoint called by the Mini App to post the selected track to the group chat.
     """
     try:
         data = request.get_json()
@@ -235,15 +269,16 @@ async def post_track_to_chat():
         if not all([chat_id, video_id, title]):
             return jsonify({'error': 'Missing chat_id, video_id, or title'}), 400
 
+        # We must await the function since it contains the HTTP request
         success = await _send_track_message(chat_id, video_id, title)
 
         if success:
-            return jsonify({'status': 'success', 'message': 'Track posted to chat for playback.'}), 200
+            return jsonify({'status': 'success', 'message': 'Track posted as streamable media.'}), 200
         else:
-            return jsonify({'status': 'error', 'message': 'Failed to post track to Telegram.'}), 500
+            return jsonify({'status': 'error', 'message': 'Failed to post track to Telegram (API call failed).'}), 500
 
     except Exception as e:
-        logger.error(f"Error in post-track-to-chat: {e}")
+        logger.error(f"Error in post-track-to-chat endpoint: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
 
 
@@ -259,7 +294,7 @@ async def health_check():
     return "Music Bot Backend is alive and ready!", 200
 
 # ------------------------------------------------------------------
-# --- 6. ASGI WRAPPER ---
+# --- 6. ASGI WRAPPER (Required for Render Deployment) ---
 # ------------------------------------------------------------------
 
 # Flask (WSGI) app को Uvicorn (ASGI) के साथ compatible बनाने के लिए wrap करें।
@@ -268,17 +303,10 @@ flask_asgi_app = WsgiToAsgi(app)
 async def application_asgi(scope, receive, send):
     """Custom ASGI application wrapper."""
     if scope['type'] in ['http', 'lifespan']:
+        # Ensure initialization runs before handling requests
+        await initialize_ptb_application() 
         await flask_asgi_app(scope, receive, send)
-    elif scope['type'] == 'websocket':
-        # WebSockets are ignored as Flask does not natively support them
-        logger.warning(f"Ignored non-HTTP scope type: {scope['type']}")
-        pass 
     else:
         await flask_asgi_app(scope, receive, send)
 
-asgi_app = application_asgi 
-
-if __name__ == '__main__':
-    PORT = int(os.environ.get('PORT', 8000))
-    logger.warning("Running with Flask built-in server (Local Only). Use Uvicorn for production.")
-    app.run(host='0.0.0.0', port=PORT, debug=True)
+asgi_app = application_asgi
