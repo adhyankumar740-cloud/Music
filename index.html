@@ -8,12 +8,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        /* --- General & Variables (Deep Space Theme) --- */
+        /* --- Styles remain the same for good UI --- */
         :root {
-            --primary-color: #00ADB5; /* Teal/Aqua - New Primary */
-            --secondary-color: #393E46; /* Dark Gray */
-            --background-color: #222831; /* Deep Black/Blue */
-            --text-color: #EEEEEE; /* Light Gray */
+            --primary-color: #00ADB5; 
+            --secondary-color: #393E46; 
+            --background-color: #222831; 
+            --text-color: #EEEEEE; 
             --muted-text-color: #AAAAAA;
             --success-color: #1DB954;
             --error-color: #FF6B6B;
@@ -46,7 +46,6 @@
         }
         p { color: var(--muted-text-color); font-size: 0.95em; margin-bottom: 25px; text-align: center; }
 
-        /* --- Search & Results --- */
         .search-container { display: flex; gap: 10px; margin-bottom: 20px; }
         #searchQuery { 
             flex-grow: 1; 
@@ -107,7 +106,6 @@
         }
         .search-info small { color: var(--muted-text-color); font-size: 0.9em; }
 
-        /* --- Status Message --- */
         #status-message {
             text-align: center;
             padding: 15px;
@@ -121,7 +119,6 @@
         .status-error { color: var(--error-color) !important; }
         .status-success { color: var(--success-color) !important; }
 
-        /* --- Player Area (Confirmation/Posting) --- */
         .player-area {
             display: flex;
             flex-direction: column;
@@ -160,8 +157,8 @@
 <body>
     <div class="container">
         <header>
-            <h1><i class="fas fa-satellite-dish"></i> Group Stream Starter</h1>
-            <p>Search for a song. We will post it to the group chat for background playback.</p>
+            <h1><i class="fas fa-headphones"></i> Group Music Stream</h1>
+            <p>Select a track to post to the group chat for synchronized playback.</p>
         </header>
         
         <div class="search-section" id="searchSection">
@@ -175,14 +172,14 @@
         </div>
 
         <div class="player-area" id="playerArea" style="display: none;">
-            <h2>Track Ready to Post!</h2>
+            <h2>Track Selected</h2>
             <img id="currentThumbnail" src="" alt="Track Thumbnail" style="width: 150px; height: 150px; border-radius: 10px; margin: 15px 0;">
             <strong id="currentTitle" style="font-size: 1.5em;">Title</strong>
             <small id="currentChannel" style="font-size: 1em; margin-bottom: 20px;">Channel</small>
 
-            <p style="margin-bottom: 10px; color: var(--primary-color);">Click the button to post the link to the chat for everyone to play (with background support)!</p>
+            <p style="margin-bottom: 10px; color: var(--primary-color);">This will activate the Telegram Group Audio Player for everyone.</p>
             
-            <button class="btn-post-track" id="postTrackButton"><i class="fas fa-paper-plane"></i> Post to Group Chat</button>
+            <button class="btn-post-track" id="postTrackButton"><i class="fas fa-play"></i> Start Group Playback</button>
             <button class="btn-post-track" style="background: #666; margin-top: 10px;" onclick="showSearch()"><i class="fas fa-undo"></i> Search Again</button>
 
         </div>
@@ -199,16 +196,15 @@
         const playerArea = document.getElementById('playerArea');
         const searchSection = document.getElementById('searchSection');
         
-        // Player/Post UI Elements
         const currentThumbnail = document.getElementById('currentThumbnail');
         const currentTitle = document.getElementById('currentTitle');
         const currentChannel = document.getElementById('currentChannel');
         const postTrackButton = document.getElementById('postTrackButton');
 
         const urlParams = new URLSearchParams(window.location.search);
-        const chat_id = urlParams.get('chat_id'); // CRITICAL: Getting chat_id from URL
+        const chat_id = urlParams.get('chat_id'); 
 
-        // TODO: REPLACE THIS WITH YOUR RENDER BACKEND URL (e.g., "https://your-backend-name.onrender.com")
+        // !!! IMPORTANT: REPLACE THIS WITH YOUR RENDER BACKEND URL !!!
         const BACKEND_BASE_URL = "https://music-bva7.onrender.com"; 
         
         let selectedTrack = {}; 
@@ -217,7 +213,7 @@
         const setStatus = (message, type = 'default') => {
             statusMessage.textContent = message;
             statusMessage.className = '';
-            statusMessage.classList.add(type === 'error' ? 'status-error' : type === 'success' ? 'status-success' : 'default');
+            statusMessage.classList.add('status-' + type);
         };
 
         const showSearch = () => {
@@ -230,7 +226,7 @@
         // ********* API COMMUNICATION LOGIC ************
         // **********************************************
 
-        // --- 1. Search YouTube ---
+        // --- 1. Search YouTube (Calls /search-youtube on Backend) ---
         searchButton.onclick = () => {
             const query = searchQueryInput.value.trim();
             if (query.length < 3) {
@@ -248,10 +244,8 @@
                 .then(response => {
                     if (!response.ok) { 
                         return response.json().then(err => {
-                            // Try to get error message from JSON response
                             throw new Error(err.error || 'Unknown server error during search.');
                         }).catch(() => {
-                            // If JSON parsing fails, use status text
                             throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
                         }); 
                     }
@@ -288,9 +282,8 @@
             });
         }
 
-        // --- 2. Prepare and Post Track ---
+        // --- 2. Prepare and Post Track (Calls /post-track-to-chat on Backend) ---
         function prepareTrackForPost(item) {
-             // Store the selected track globally
              selectedTrack = {
                 id: item.id,
                 title: item.title,
@@ -298,15 +291,13 @@
                 thumbnail: item.thumbnail
              };
              
-             // Update the confirmation area UI
              currentThumbnail.src = item.thumbnail;
              currentTitle.textContent = item.title;
              currentChannel.textContent = item.channel;
              
-             // Switch to confirmation view
              searchSection.style.display = 'none';
              playerArea.style.display = 'flex';
-             setStatus(`Selected: ${item.title}. Click 'Post to Group Chat' to start playback.`);
+             setStatus(`Selected: ${item.title}. Click 'Start Group Playback'.`);
         }
 
         postTrackButton.onclick = () => {
@@ -349,7 +340,7 @@
             })
             .then(data => {
                 setStatus(`Success! Track posted to chat. ${data.message}`, 'success');
-                // Auto-close the Web App after a short delay
+                // Auto-close the Web App after success
                 setTimeout(() => {
                     if (window.Telegram && window.Telegram.WebApp) {
                         Telegram.WebApp.close();
@@ -373,15 +364,12 @@
                 Telegram.WebApp.ready();
                 Telegram.WebApp.expand();
                 
-                // Optional: Enable confirmation before closing
-                // Telegram.WebApp.enableClosingConfirmation(); 
-                
                 Telegram.WebApp.MainButton.setText("Close Search").show().onClick(function() {
                     Telegram.WebApp.close(); 
                 });
                 
                 if (!chat_id) {
-                     setStatus("CRITICAL ERROR: Chat ID is missing from URL. Cannot post to group.", 'error');
+                     setStatus("CRITICAL ERROR: Chat ID is missing from URL. Cannot post to group. Ensure you opened this from a /play command in a group.", 'error');
                 } else {
                      setStatus("Telegram Web App Ready. Enter your search query.");
                 }
@@ -392,4 +380,4 @@
         };
     </script>
 </body>
-    </html>
+</html>
