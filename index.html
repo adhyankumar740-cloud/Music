@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Sync Audio Player</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* --- General & Variables (Deep Space Theme) --- */
+        :root {
+            --primary-color: #00ADB5; /* Teal/Aqua - New Primary */
+            --secondary-color: #393E46; /* Dark Gray */
+            --background-color: #222831; /* Deep Black/Blue */
+            --text-color: #EEEEEE; /* Light Gray */
+            --muted-text-color: #AAAAAA;
+            --success-color: #1DB954;
+            --error-color: #FF6B6B;
+            --border-radius: 10px;
+            --shadow-color: rgba(0, 0, 0, 0.6);
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 550px;
+            padding: 20px 15px;
+            box-sizing: border-box;
+        }
+        h1 { 
+            font-weight: 800; 
+            font-size: 1.8em; 
+            margin-bottom: 5px; 
+            color: var(--primary-color);
+            text-align: center;
+        }
+        p { color: var(--muted-text-color); font-size: 0.95em; margin-bottom: 25px; text-align: center; }
+
+        /* --- Search & Results --- */
+        .search-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        #searchQuery { 
+            flex-grow: 1; 
+            padding: 14px 18px; 
+            border-radius: 10px; 
+            border: 1px solid #444; 
+            background: #2D333A; 
+            color: var(--text-color);
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
+            font-size: 1em;
+        }
+        #searchButton { 
+            padding: 14px 20px; 
+            border-radius: 10px; 
+            border: none; 
+            background-color: var(--primary-color); 
+            color: var(--background-color); 
+            font-weight: 700; 
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        #searchButton:hover { background-color: #00C8D1; }
+        #searchButton:active { transform: scale(0.98); }
+
+        #searchResults { 
+            max-height: 45vh; 
+            overflow-y: auto; 
+            background: var(--secondary-color); 
+            border-radius: var(--border-radius); 
+            box-shadow: 0 8px 20px var(--shadow-color);
+            padding: 5px 0;
+        }
+        .search-item { 
+            padding: 15px 18px; 
+            display: flex; 
+            align-items: center; 
+            cursor: pointer; 
+            border-bottom: 1px solid #444; 
+            transition: background-color 0.2s; 
+        }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background-color: #484E57; }
+        .search-item img { 
+            width: 60px; 
+            height: 60px; 
+            margin-right: 15px; 
+            border-radius: 8px; 
+            object-fit: cover;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5); 
+        }
+        .search-info strong { 
+            display: block; 
+            font-size: 1.15em; 
+            font-weight: 600;
+            overflow: hidden; 
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .search-info small { color: var(--muted-text-color); font-size: 0.9em; }
+
+        /* --- Status Message --- */
+        #status-message {
+            text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            background: #393E46;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            color: var(--primary-color);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+        }
+        .status-error { color: var(--error-color) !important; }
+        .status-success { color: var(--success-color) !important; }
+
+        /* --- Player Area (Placeholder) --- */
+        .player-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 15px;
+            background: linear-gradient(145deg, #222831, #1A1F25);
+            border-radius: var(--border-radius);
+            box-shadow: 0 15px 40px var(--shadow-color);
+            text-align: center;
+        }
+        .player-area h2 {
+            font-size: 1.4em;
+            color: var(--text-color);
+            margin-bottom: 10px;
+        }
+        .player-area p {
+            font-size: 1em;
+            color: var(--muted-text-color);
+            margin-bottom: 0;
+        }
+        .btn-post-track {
+            margin-top: 20px;
+            padding: 12px 25px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-post-track:hover { background-color: #17A348; }
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-satellite-dish"></i> Group Stream Starter</h1>
+            <p>Search for a song. We will post it to the group chat for background playback.</p>
+        </header>
+        
+        <div class="search-section" id="searchSection">
+            <div class="search-container">
+                <input type="text" id="searchQuery" placeholder="Search for songs, artists, or albums..." />
+                <button id="searchButton">🔍</button>
+            </div>
+            <div id="searchResults">
+                <p style="text-align:center; padding: 20px;">Use the search bar above to find music.</p>
+            </div>
+        </div>
+
+        <div class="player-area" id="playerArea" style="display: none;">
+            <h2>Track Ready to Post!</h2>
+            <img id="currentThumbnail" src="" alt="Track Thumbnail" style="width: 150px; height: 150px; border-radius: 10px; margin: 15px 0;">
+            <strong id="currentTitle" style="font-size: 1.5em;">Title</strong>
+            <small id="currentChannel" style="font-size: 1em; margin-bottom: 20px;">Channel</small>
+
+            <p style="margin-bottom: 10px; color: var(--primary-color);">Click the button to post the link to the chat for everyone to play and sync!</p>
+            
+            <button class="btn-post-track" id="postTrackButton"><i class="fas fa-paper-plane"></i> Post to Group Chat</button>
+            <button class="btn-post-track" style="background: #666; margin-top: 10px;" onclick="showSearch()"><i class="fas fa-undo"></i> Search Again</button>
+
+            </div>
+        
+        <div id="status-message">Loading Telegram Web App...</div>
+    </div>
+
+    <script>
+        // --- Global Variables and Setup ---
+        const statusMessage = document.getElementById('status-message');
+        const searchButton = document.getElementById('searchButton');
+        const searchQueryInput = document.getElementById('searchQuery');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const playerArea = document.getElementById('playerArea');
+        const searchSection = document.getElementById('searchSection');
+        
+        // Player/Post UI Elements
+        const currentThumbnail = document.getElementById('currentThumbnail');
+        const currentTitle = document.getElementById('currentTitle');
+        const currentChannel = document.getElementById('currentChannel');
+        const postTrackButton = document.getElementById('postTrackButton');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const chat_id = urlParams.get('chat_id'); // CRITICAL: Getting chat_id from URL
+
+        // FIX: Update this with your Render Backend URL
+        const BACKEND_BASE_URL = "https://music-bva7.onrender.com"; 
+        
+        let selectedTrack = {}; // To hold the track info before posting
+        
+        // --- Utility Functions ---
+        const setStatus = (message, type = 'default') => {
+            statusMessage.textContent = message;
+            statusMessage.className = '';
+            statusMessage.classList.add(type === 'error' ? 'status-error' : type === 'success' ? 'status-success' : 'default');
+        };
+
+        const showSearch = () => {
+             playerArea.style.display = 'none';
+             searchSection.style.display = 'block';
+             setStatus('Ready to search.');
+        }
+
+        // **********************************************
+        // ********* API COMMUNICATION LOGIC ************
+        // **********************************************
+
+        // --- 1. Search YouTube ---
+        searchButton.onclick = () => {
+            const query = searchQueryInput.value.trim();
+            if (query.length < 3) {
+                searchResultsDiv.innerHTML = '<p style="color:var(--error-color); text-align:center; padding: 20px;">Enter at least 3 characters to search.</p>';
+                return;
+            }
+            setStatus(`Searching for "${query}"...`);
+            fetchResults(query);
+        };
+
+        function fetchResults(query) {
+            const searchUrl = `${BACKEND_BASE_URL}/search-youtube?q=${encodeURIComponent(query)}`;
+            
+            fetch(searchUrl)
+                .then(response => {
+                    if (!response.ok) { return response.json().then(err => Promise.reject(err.error)); }
+                    return response.json();
+                })
+                .then(data => {
+                    displayResults(data.results);
+                    setStatus(data.results.length === 0 ? 'No results found.' : `${data.results.length} results found. Select a song.`, 'default');
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    setStatus(`Search failed: ${error}`, 'error');
+                });
+        }
+
+        function displayResults(results) {
+            searchResultsDiv.innerHTML = '';
+            if (results.length === 0) { searchResultsDiv.innerHTML = '<p style="text-align:center; padding: 20px;">No results found.</p>'; return; }
+
+            results.forEach(item => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'search-item';
+                resultItem.innerHTML = `
+                    <img src="${item.thumbnail}" alt="${item.title}">
+                    <div class="search-info">
+                        <strong>${item.title}</strong>
+                        <small>${item.channel}</small>
+                    </div>
+                `;
+                resultItem.onclick = () => {
+                    prepareTrackForPost(item); 
+                };
+                searchResultsDiv.appendChild(resultItem);
+            });
+        }
+
+        // --- 2. Prepare and Post Track ---
+        function prepareTrackForPost(item) {
+             // Store the selected track globally
+             selectedTrack = {
+                id: item.id,
+                title: item.title,
+                channel: item.channel,
+                thumbnail: item.thumbnail
+             };
+             
+             // Update the confirmation area UI
+             currentThumbnail.src = item.thumbnail;
+             currentTitle.textContent = item.title;
+             currentChannel.textContent = item.channel;
+             
+             // Switch to confirmation view
+             searchSection.style.display = 'none';
+             playerArea.style.display = 'flex';
+             setStatus(`Selected: ${item.title}. Click 'Post to Group Chat' to start playback.`);
+        }
+
+        postTrackButton.onclick = () => {
+            if (!chat_id) {
+                 setStatus('Error: Cannot post. Chat ID is missing!', 'error');
+                 return;
+            }
+            if (!selectedTrack.id) {
+                 setStatus('Error: Please select a song first.', 'error');
+                 return;
+            }
+
+            postTrack(selectedTrack.id, selectedTrack.title);
+        };
+
+        function postTrack(videoId, title) {
+            setStatus('Posting track to chat, please wait...', 'default');
+            postTrackButton.disabled = true;
+
+            fetch(`${BACKEND_BASE_URL}/post-track-to-chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    chat_id: chat_id,
+                    video_id: videoId,
+                    title: title
+                })
+            })
+            .then(response => {
+                if (!response.ok) { return response.json().then(err => Promise.reject(err.error)); }
+                return response.json();
+            })
+            .then(data => {
+                setStatus(`Success! Track posted to chat. ${data.message}`, 'success');
+                // Auto-close the Web App after a short delay
+                setTimeout(() => {
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        Telegram.WebApp.close();
+                    }
+                }, 2000); 
+            })
+            .catch(error => {
+                console.error('Post error:', error);
+                setStatus(`Failed to post track: ${error}`, 'error');
+                postTrackButton.disabled = false;
+            });
+        }
+
+
+        // **********************************************
+        // ********* TWA Initialization & Cleanup *******
+        // **********************************************
+        
+        // Remove Wakelock logic as we are relying on Telegram's native player now
+        
+        window.onload = function() {
+              if (window.Telegram && window.Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                Telegram.WebApp.expand();
+                Telegram.WebApp.enableClosingConfirmation(); // Keep this for user experience
+                
+                // New Main Button Logic: Only shows search again
+                Telegram.WebApp.MainButton.setText("Close Player").show().onClick(function() {
+                    Telegram.WebApp.close(); 
+                });
+                
+                if (!chat_id) {
+                     setStatus("CRITICAL ERROR: Chat ID is missing from URL. Cannot post to group.", 'error');
+                } else {
+                     setStatus("Telegram Web App Ready. Enter your search query.");
+                }
+                
+             } else {
+                setStatus("Warning: Not running inside Telegram Web App.", 'error');
+             }
+        };
+    </script>
+</body>
+</html>
