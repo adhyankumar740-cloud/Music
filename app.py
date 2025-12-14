@@ -5,7 +5,6 @@ from typing import Optional
 
 # Flask is used for routing (ASGI compatibility needed)
 from flask import Flask, request, jsonify, abort 
-# New Import: CORS is needed for the Web App to communicate with the search API
 from flask_cors import CORS 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
@@ -36,7 +35,6 @@ WEBHOOK_PATH = f'/webhook/{TELEGRAM_BOT_TOKEN}' if TELEGRAM_BOT_TOKEN else '/web
 
 # --- Global Objects ---
 app = Flask(__name__)
-# FIX: Enable CORS for all origins and methods
 CORS(app) 
 application: Optional[Application] = None
 
@@ -46,12 +44,10 @@ application: Optional[Application] = None
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command."""
-    # Using effective_message for compatibility
     await update.effective_message.reply_text("Welcome! Type `/play` to start the group music player.")
 
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /play command and sends the Web App link."""
-    # FIX 1: Ensure effective_message exists for group compatibility
     if not update.effective_message:
         return 
 
@@ -60,6 +56,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     chat_id = update.effective_chat.id
+    # Mini App URL for search interface
     player_url = f"{RENDER_FRONTEND_URL}?chat_id={chat_id}&mode=search"
     
     web_app_info = WebAppInfo(url=player_url)
@@ -72,7 +69,6 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Use effective_message to reply correctly in group chats
     await update.effective_message.reply_text(
         'Open the player to search and sync music with your group:', 
         reply_markup=reply_markup
@@ -80,12 +76,10 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responds to non-command text messages."""
-    # FIX 2: Only reply to non-command text messages in Private Chats (DMs) 
-    # to prevent spamming in Group Chats.
+    # FIX: Only reply in Private Chats (DMs) to prevent group spam.
     if update.effective_chat.type == 'private':
         await update.message.reply_text("I am programmed to play music only. Please use `/play`.")
-    # If it's a group, we do nothing for non-command text messages.
-
+        
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs errors caused by Updates."""
     logger.error("Exception while handling an update:", exc_info=context.error)
@@ -95,7 +89,6 @@ def setup_handlers(app_ptb: Application):
     logger.info("Setting up Music Bot handlers...")
     app_ptb.add_handler(CommandHandler("start", start_command))
     app_ptb.add_handler(CommandHandler("play", play_command))
-    # Note: filters.COMMAND is important here to ensure only non-command text is handled
     app_ptb.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
     app_ptb.add_error_handler(error_handler)
     logger.info("All handlers set up.")
@@ -125,9 +118,6 @@ async def initialize_ptb_application():
         logger.info(f"Auto-Webhook successfully set to {webhook_url}")
     else:
         logger.error("Auto-Webhook setting failed.")
-    
-    # We don't call application.start() here in a webhook environment, 
-    # but application.initialize() is crucial.
 
 # ------------------------------------------------------------------
 # --- 3. WEBHOOK ENDPOINT (Async) ---
@@ -136,7 +126,6 @@ async def initialize_ptb_application():
 @app.route(WEBHOOK_PATH, methods=['POST'])
 async def telegram_webhook(): 
     """Handles incoming Telegram updates and passes them to PTB."""
-    # Ensure application is initialized before processing updates
     if not application:
         await initialize_ptb_application() 
         if not application:
@@ -144,10 +133,8 @@ async def telegram_webhook():
 
     if request.method == "POST":
         try:
-            # request.get_json() is synchronous in Flask
             request_data = request.get_json(force=True) 
             update = Update.de_json(request_data, application.bot) 
-            # Process update in the event loop
             await application.process_update(update) 
             return 'ok' 
         except Exception as e:
@@ -162,6 +149,7 @@ async def telegram_webhook():
 @app.route('/search-youtube', methods=['GET'])
 def search_youtube():
     """Handles YouTube search queries using the Data API."""
+    # (Same code as before, no changes needed here)
     query = request.args.get('q')
     if not query:
         return jsonify({'error': 'Query parameter "q" is required'}), 400
@@ -196,6 +184,65 @@ def search_youtube():
     except requests.exceptions.RequestException as e:
         logger.error(f"YouTube API Error: {e}", exc_info=True)
         return jsonify({'error': f'Failed to search YouTube: {e}'}), 500
+
+
+# ------------------------------------------------------------------
+# --- 4.5. NEW: TRACK POSTING ENDPOINT (Group Playback/Background Fix) ---
+# ------------------------------------------------------------------
+
+async def _send_track_message(chat_id, video_id, title):
+    """Internal function to send a Telegram message asynchronously."""
+    if not application:
+        await initialize_ptb_application()
+    if not application:
+        return False
+
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+    message = f"🎶 **Playing Now**\n[{title}]({youtube_url})"
+    
+    try:
+        # Use send_message with parse_mode='MarkdownV2' for rich link previews
+        await application.bot.send_message(
+            chat_id=chat_id, 
+            text=message, 
+            parse_mode='MarkdownV2',
+            # For better group integration, use an Inline Keyboard button to open Web App again
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Open Player", url=RENDER_FRONTEND_URL)
+            ]])
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send track message to chat {chat_id}: {e}")
+        return False
+
+@app.route('/post-track-to-chat', methods=['POST'])
+async def post_track_to_chat():
+    """
+    Accepts track info from the Web App and posts it to the group chat.
+    This allows Telegram to handle the YouTube link natively, enabling background play.
+    """
+    try:
+        data = request.get_json()
+        chat_id = data.get('chat_id')
+        video_id = data.get('video_id')
+        title = data.get('title')
+
+        if not all([chat_id, video_id, title]):
+            return jsonify({'error': 'Missing chat_id, video_id, or title'}), 400
+
+        # Run the async Telegram sending function
+        success = await _send_track_message(chat_id, video_id, title)
+
+        if success:
+            return jsonify({'status': 'success', 'message': 'Track posted to chat for playback.'}), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to post track to Telegram.'}), 500
+
+    except Exception as e:
+        logger.error(f"Error in post-track-to-chat: {e}")
+        return jsonify({'error': 'Internal Server Error'}), 500
+
 
 # ------------------------------------------------------------------
 # --- 5. SERVER STARTUP & HEALTH CHECK ---
@@ -237,7 +284,6 @@ asgi_app = application_asgi
 # ------------------------------------------------------------------
 
 if __name__ == '__main__':
-    # For local development/testing only
     PORT = int(os.environ.get('PORT', 8000))
     logger.warning("Running with Flask built-in server (Local Only). Use Uvicorn for production.")
     app.run(host='0.0.0.0', port=PORT, debug=True)
