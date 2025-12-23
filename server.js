@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const app = express();
@@ -9,181 +10,176 @@ app.use(express.json());
 
 // --- DB SETUP ---
 mongoose.connect(process.env.MONGODB_URI).catch(e => console.log("DB Error"));
-const Song = mongoose.model('Song', { 
-    title: String, videoId: String, thumbnail: String, userEmail: String 
+
+const User = mongoose.model('User', { username: {type: String, unique: true}, password: {type: String} });
+const Song = mongoose.model('Song', { title: String, videoId: String, thumbnail: String, owner: String });
+
+// --- AUTH API ---
+app.post('/api/register', async (req, res) => {
+    try {
+        const hash = await bcrypt.hash(req.body.password, 10);
+        await new User({ username: req.body.username, password: hash }).save();
+        res.json({ m: "success" });
+    } catch (e) { res.status(400).json({ m: "Username exists" }); }
 });
 
-// --- API ---
-app.get('/api/config', (req, res) => res.json({ 
-    yt_key: process.env.YOUTUBE_API_KEY,
-    google_client_id: process.env.GOOGLE_CLIENT_ID // Render mein ye bhi daalna hoga
-}));
-
-app.get('/api/playlist', async (req, res) => {
-    const email = req.query.email;
-    res.json(await Song.find({ userEmail: email }));
+app.post('/api/login', async (req, res) => {
+    const user = await User.findOne({ username: req.body.username });
+    if (user && await bcrypt.compare(req.body.password, user.password)) {
+        res.json({ m: "ok", username: user.username });
+    } else { res.status(401).json({ m: "Invalid" }); }
 });
 
-app.post('/api/playlist', async (req, res) => {
-    await new Song(req.body).save();
-    res.json({ m: "ok" });
-});
+// --- MUSIC API ---
+app.get('/api/config', (req, res) => res.json({ yt_key: process.env.YOUTUBE_API_KEY }));
+app.get('/api/playlist', async (req, res) => res.json(await Song.find({ owner: req.query.user })));
+app.post('/api/playlist', async (req, res) => { await new Song(req.body).save(); res.json({ m: "ok" }); });
+app.delete('/api/playlist/:id', async (req, res) => { await Song.deleteOne({ videoId: req.params.id, owner: req.query.user }); res.json({ m: "ok" }); });
 
-// --- PWA ---
+// --- PWA Support ---
 app.get('/manifest.json', (req, res) => res.json({
     "name": "Pixel Music", "short_name": "Pixel", "start_url": "/", "display": "standalone",
-    "background_color": "#0a0510", "theme_color": "#9d50bb",
+    "background_color": "#070707", "theme_color": "#1DB954",
     "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/3844/3844724.png", "sizes": "512x512", "type": "image/png" }]
 }));
-
-app.get('/sw.js', (req, res) => {
-    res.set('Content-Type', 'application/javascript');
-    res.send("self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('fetch', e => e);");
-});
 
 // --- FRONTEND ---
 app.get('/', (req, res) => {
     res.send(`
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixel Spotify</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Music</title>
     <link rel="manifest" href="/manifest.json">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
-        :root { --bg: #070707; --purple: #9d50bb; --card: #181818; --text-dim: #b3b3b3; }
-        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; overflow-x: hidden; }
+        :root { --spotify-green: #1DB954; --bg-black: #070707; --card-grey: #121212; --text-dim: #b3b3b3; }
+        body { background: var(--bg-black); color: white; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding-bottom: 160px; }
         
-        .header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.5); position: sticky; top: 0; z-index: 100; }
-        .hero { background: linear-gradient(to bottom, #4e1b7a, var(--bg)); padding: 40px 20px; }
-        
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 20px; }
-        .card { background: var(--card); padding: 15px; border-radius: 8px; transition: 0.3s; cursor: pointer; position: relative; }
-        .card:hover { background: #282828; }
-        .card img { width: 100%; border-radius: 5px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-        .card b { display: block; margin-top: 10px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .card span { color: var(--text-dim); font-size: 12px; }
+        /* Login Overlay */
+        #auth-screen { position: fixed; inset: 0; background: var(--bg-black); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .auth-input { width: 100%; max-width: 300px; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; background: #282828; color: white; }
+        .auth-btn { width: 100%; max-width: 300px; padding: 12px; border-radius: 25px; border: none; background: var(--spotify-green); color: black; font-weight: bold; margin-top: 10px; }
 
-        /* Spotify Player Bar */
-        .player-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; border-top: 1px solid #282828; display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; padding: 0 15px; box-sizing: border-box; }
-        .now-playing { display: flex; align-items: center; gap: 12px; }
-        .now-playing img { width: 55px; height: 55px; border-radius: 4px; display:none; }
-        .song-info b { font-size: 14px; display: block; }
-        .song-info span { font-size: 11px; color: var(--text-dim); }
-        
-        .controls { text-align: center; }
-        iframe { width: 100%; height: 40px; border:none; }
-        
-        .search-container { padding: 0 20px; margin-top: -20px; }
-        input { background: #333; border: none; padding: 10px 20px; border-radius: 20px; color: white; width: 250px; }
-        .hidden { display: none; }
+        /* Mobile Header */
+        .header { padding: 20px; background: linear-gradient(to bottom, #222, var(--bg-black)); }
+        .search-bar { background: #282828; padding: 10px 15px; border-radius: 20px; display: flex; align-items: center; margin-top: 15px; }
+        .search-bar input { background: transparent; border: none; color: white; flex: 1; outline: none; }
+
+        /* Song Grid */
+        .section-title { padding: 0 20px; margin-top: 20px; font-size: 22px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 20px; }
+        .card { background: var(--card-grey); padding: 12px; border-radius: 8px; text-align: left; position: relative; }
+        .card img { width: 100%; border-radius: 4px; aspect-ratio: 1/1; object-fit: cover; }
+        .card b { display: block; font-size: 13px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card span { font-size: 11px; color: var(--text-dim); }
+
+        /* Spotify Player Bar (Fixed Bottom) */
+        .player-bar { position: fixed; bottom: 70px; left: 10px; right: 10px; height: 60px; background: #282828; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; z-index: 500; }
+        .player-bar img { width: 45px; height: 45px; border-radius: 4px; margin-right: 12px; }
+        .p-info { flex: 1; overflow: hidden; }
+        .p-info b { font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .p-info span { font-size: 10px; color: var(--text-dim); }
+        .p-video { width: 100px; height: 50px; border-radius: 4px; overflow: hidden; border: 1px solid #444; }
+
+        /* Bottom Nav */
+        .nav-bottom { position: fixed; bottom: 0; width: 100%; height: 70px; background: rgba(0,0,0,0.9); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #222; }
+        .nav-item { text-align: center; color: var(--text-dim); font-size: 10px; text-decoration: none; cursor: pointer; }
+        .nav-item.active { color: white; }
     </style>
 </head>
 <body>
 
+    <div id="auth-screen">
+        <h1 style="color:var(--spotify-green)">Pixel Music</h1>
+        <input id="u-id" class="auth-input" placeholder="Username">
+        <input id="u-pass" type="password" class="auth-input" placeholder="Password">
+        <button class="auth-btn" onclick="auth('login')">Log In</button>
+        <p onclick="auth('register')" style="color:var(--text-dim); font-size:12px; margin-top:15px">New user? Register here</p>
+    </div>
+
     <div class="header">
-        <h2 style="color:var(--purple)">Pixel Music</h2>
-        <div id="g_id_onload" data-client_id="" data-callback="handleLogin"></div>
-        <div class="g_id_signin" data-type="standard"></div>
-        <div id="user-profile" class="hidden"></div>
-    </div>
-
-    <div class="hero" id="hero-section">
-        <h1 id="welcome-msg">Good Evening</h1>
-        <div class="search-container">
-            <input id="q" placeholder="What do you want to listen to?">
-            <button onclick="search()" style="background:var(--purple); border:none; color:white; padding:10px; border-radius:50%; cursor:pointer;">🔍</button>
+        <h2>Good Evening</h2>
+        <div class="search-bar">
+            <span>🔍</span>
+            <input id="q" placeholder="Search songs..." onchange="search()">
         </div>
     </div>
 
-    <h3 style="padding: 0 20px;">Recommended for you</h3>
-    <div id="grid" class="grid"></div>
+    <div id="content">
+        <h3 class="section-title" id="sec-title">Recommended</h3>
+        <div id="grid" class="grid"></div>
+    </div>
 
-    <div class="player-bar">
-        <div class="now-playing">
-            <img id="p-img" src="">
-            <div class="song-info">
-                <b id="p-title">Select a song</b>
-                <span id="p-artist">YouTube Music</span>
-            </div>
+    <div class="player-bar" id="p-bar" style="display:none">
+        <img id="p-img" src="">
+        <div class="p-info">
+            <b id="p-title">Song Title</b>
+            <span id="p-artist">YouTube Music</span>
         </div>
-        <div class="controls">
-            <div id="player-div"></div>
-        </div>
-        <div style="text-align: right">
-            <button onclick="loadPlaylist()" id="lib-btn" class="hidden" style="background:none; color:white; border:1px solid white; padding:5px 10px; border-radius:15px; cursor:pointer;">Your Library ❤️</button>
-        </div>
+        <div class="p-video" id="p-vid"></div>
+    </div>
+
+    <div class="nav-bottom">
+        <div class="nav-item active" onclick="location.reload()">🏠<br>Home</div>
+        <div class="nav-item" onclick="loadLib()">📚<br>Library</div>
+        <div class="nav-item" onclick="logout()">👤<br>Logout</div>
     </div>
 
     <script>
-        let KEY = ""; let USER = null;
+        let KEY = ""; let USER = localStorage.getItem('pixelUser');
+        if(USER) document.getElementById('auth-screen').style.display='none';
 
         async function init() {
             const r = await fetch('/api/config');
+            const d = await r.json(); KEY = d.yt_key;
+            fetchSongs("Lofi hip hop");
+        }
+
+        async function auth(type) {
+            const u = document.getElementById('u-id').value;
+            const p = document.getElementById('u-pass').value;
+            const r = await fetch('/api/'+type, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p}) });
             const d = await r.json();
-            KEY = d.yt_key;
-            document.getElementById('g_id_onload').setAttribute('data-client_id', d.google_client_id);
-            loadRecommended();
-            if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+            if(d.m === 'ok' || d.m === 'success') {
+                if(type==='login') { localStorage.setItem('pixelUser', u); location.reload(); }
+                else alert("Registered! Now Login.");
+            } else alert("Error: " + d.m);
         }
 
-        // Spotify-style Recommended Songs on start
-        async function loadRecommended() {
-            const hits = ["Lofi hip hop mix", "Top hits 2024", "Arijit Singh best songs"];
-            const randomHit = hits[Math.floor(Math.random() * hits.length)];
-            fetchSongs(randomHit);
-        }
-
-        async function fetchSongs(query) {
-            const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&q='+query+'&type=video&maxResults=10&key='+KEY);
-            const d = await r.json();
-            render(d.items, true);
-        }
-
-        function handleLogin(response) {
-            const base64Url = response.credential.split('.')[1];
-            USER = JSON.parse(window.atob(base64Url));
-            document.getElementById('welcome-msg').innerText = "Hi, " + USER.given_name;
-            document.getElementById('lib-btn').classList.remove('hidden');
-            document.querySelector('.g_id_signin').classList.add('hidden');
-        }
-
-        async function search() {
-            fetchSongs(document.getElementById('q').value);
+        async function fetchSongs(q) {
+            const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&q='+q+'&type=video&maxResults=10&key='+KEY);
+            const d = await r.json(); render(d.items, true);
         }
 
         function render(songs, isS) {
             const g = document.getElementById('grid'); g.innerHTML = '';
             songs.forEach(s => {
-                const id = isS ? s.id.videoId : s.videoId;
+                const vid = isS ? s.id.videoId : s.videoId;
                 const t = (isS ? s.snippet.title : s.title).replace(/'/g,"");
                 const img = isS ? s.snippet.thumbnails.medium.url : s.thumbnail;
                 g.innerHTML += \`
-                    <div class="card" onclick="play('\${id}', '\${t}', '\${img}')">
+                    <div class="card" onclick="play('\${vid}', '\${t}', '\${img}')">
                         <img src="\${img}">
                         <b>\${t}</b>
-                        <span>YouTube Video</span>
-                        \${isS && USER ? \`<button onclick="event.stopPropagation();save('\${id}','\${t}','\${img}')" style="position:absolute; bottom:10px; right:10px; background:var(--purple); border:none; border-radius:50%; color:white; width:30px; height:30px;">+</button>\` : ''}
+                        <span>YouTube</span>
+                        \${isS ? \`<button onclick="event.stopPropagation();save('\${vid}','\${t}','\${img}')" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.6);border:none;color:white;border-radius:50%;padding:5px">+</button>\`: \`<button onclick="event.stopPropagation();del('\${vid}')" style="position:absolute;top:5px;right:5px;background:red;border:none;color:white;border-radius:50%;width:20px;height:20px">×</button>\`}
                     </div>\`;
             });
         }
 
-        async function save(v,t,i) {
-            await fetch('/api/playlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({videoId:v,title:t,thumbnail:i, userEmail: USER.email})});
-            alert("Added to Library");
-        }
-
-        async function loadPlaylist() {
-            const r = await fetch('/api/playlist?email=' + USER.email);
-            render(await r.json(), false);
-        }
+        async function search() { fetchSongs(document.getElementById('q').value); }
+        async function save(v,t,i) { await fetch('/api/playlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({videoId:v,title:t,thumbnail:i, owner:USER})}); alert("Saved!"); }
+        async function loadLib() { document.getElementById('sec-title').innerText="Your Library"; const r = await fetch('/api/playlist?user='+USER); render(await r.json(), false); }
+        async function del(id) { await fetch('/api/playlist/'+id+'?user='+USER, {method:'DELETE'}); loadLib(); }
+        function logout() { localStorage.clear(); location.reload(); }
 
         function play(id, t, img) {
+            document.getElementById('p-bar').style.display = 'flex';
             document.getElementById('p-title').innerText = t;
-            const pImg = document.getElementById('p-img');
-            pImg.src = img; pImg.style.display = 'block';
-            document.getElementById('player-div').innerHTML = '<iframe src="https://www.youtube.com/embed/'+id+'?autoplay=1&control=0" allow="autoplay"></iframe>';
+            document.getElementById('p-img').src = img;
+            document.getElementById('p-vid').innerHTML = '<iframe width="100%" height="100%" src="https://www.youtube.com/embed/'+id+'?autoplay=1&controls=1" frameborder="0" allow="autoplay"></iframe>';
         }
 
         init();
@@ -194,4 +190,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log("Spotify Clone Live"));
+app.listen(PORT, () => console.log("Mobile Spotify Live"));
