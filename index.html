@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Music</title>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<style>
+body{
+  margin:0;
+  background:#121212;
+  color:white;
+  font-family:Arial;
+}
+.header{
+  padding:20px;
+  font-size:24px;
+  font-weight:bold;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:12px;
+  padding:15px;
+}
+.card{
+  background:#181818;
+  border-radius:10px;
+  overflow:hidden;
+}
+.card img{width:100%}
+.card p{padding:10px;font-size:14px}
+.player{
+  position:fixed;
+  bottom:0;
+  width:100%;
+  background:#181818;
+  padding:10px;
+}
+.controls{
+  display:flex;
+  justify-content:space-around;
+  font-size:22px;
+}
+button{
+  background:none;
+  border:none;
+  color:white;
+  font-size:22px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">Pixel Music</div>
+<div class="grid" id="grid"></div>
+
+<div class="player">
+  <input type="range" id="seek" value="0" style="width:100%">
+  <div class="controls">
+    <button onclick="seek(-10)">⏪</button>
+    <button onclick="playPause()">▶️</button>
+    <button onclick="seek(10)">⏩</button>
+    <button onclick="joinJam()">🎧</button>
+  </div>
+</div>
+
+<div id="yt" style="display:none"></div>
+
+<script>
+let yt, playing=false, videoId="", room="pixel";
+const socket = io();
+
+function onYouTubeIframeAPIReady(){
+  yt=new YT.Player("yt",{events:{onReady:init}});
+}
+
+async function init(){
+  const r=await fetch("/api/config");
+  const d=await r.json();
+  const res=await fetch(
+    `https://www.googleapis.com/youtube/v3/search?part=snippet&q=bollywood&type=video&maxResults=8&key=${d.yt}`
+  );
+  const data=await res.json();
+  render(data.items);
+}
+
+function render(list){
+  const g=document.getElementById("grid");
+  list.forEach(v=>{
+    g.innerHTML+=`
+      <div class="card" onclick="play('${v.id.videoId}')">
+        <img src="${v.snippet.thumbnails.high.url}">
+        <p>${v.snippet.title}</p>
+      </div>`;
+  });
+}
+
+function play(id){
+  videoId=id;
+  yt.loadVideoById(id);
+  socket.emit("play",{roomId:room,videoId:id,time:0,playing:true});
+}
+
+function playPause(){
+  if(playing){ yt.pauseVideo(); socket.emit("pause",room);}
+  else{ yt.playVideo(); socket.emit("play",{roomId:room,videoId, time:yt.getCurrentTime(),playing:true});}
+  playing=!playing;
+}
+
+function seek(t){
+  yt.seekTo(yt.getCurrentTime()+t,true);
+  socket.emit("seek",{roomId:room,time:yt.getCurrentTime()});
+}
+
+function joinJam(){
+  socket.emit("join",room);
+  alert("Joined Jam 🎧");
+}
+
+socket.on("play",d=>yt.loadVideoById(d.videoId,d.time));
+socket.on("pause",()=>yt.pauseVideo());
+socket.on("seek",t=>yt.seekTo(t,true));
+</script>
+</body>
+</html>
