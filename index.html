@@ -85,7 +85,10 @@ async function init(){
     const r=await fetch("/api/config"); const d=await r.json();
     const res=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=bollywood&type=video&maxResults=8&key=${d.yt}`);
     const data=await res.json();
-    renderSongs(data.items);
+    if(data.items && data.items.length>0){
+        renderSongs(data.items);
+        document.getElementById("loading").style.display="none";
+    } else document.getElementById("loading").innerText="No songs found";
 }
 
 function renderSongs(list){
