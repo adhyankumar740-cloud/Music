@@ -1,207 +1,286 @@
+// ================== PIXEL MUSIC ==================
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
-require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
 
 app.use(cors());
+app.use(express.json());
 
-/* ================= JAM STATE ================= */
-const rooms = {}; 
-// roomId -> { videoId, time, playing }
+// ================== JAM ROOMS ==================
+let rooms = {}; 
+/*
+rooms = {
+  roomId: {
+    videoId,
+    time,
+    isPlaying
+  }
+}
+*/
 
-/* ================= SOCKET ================= */
+// ================== SOCKET ==================
 io.on("connection", socket => {
 
-  socket.on("join-jam", room => {
+  socket.on("join", room => {
     socket.join(room);
-    if (rooms[room]) socket.emit("jam-sync", rooms[room]);
+    if (!rooms[room]) {
+      rooms[room] = { videoId: null, time: 0, isPlaying: false };
+    }
+    socket.emit("sync", rooms[room]);
   });
 
-  socket.on("jam-play", data => {
-    rooms[data.room] = {
-      videoId: data.videoId,
-      time: data.time,
-      playing: true
-    };
-    socket.to(data.room).emit("jam-play", rooms[data.room]);
+  socket.on("play", ({ room, videoId }) => {
+    rooms[room].videoId = videoId;
+    rooms[room].isPlaying = true;
+    io.to(room).emit("play", videoId);
   });
 
-  socket.on("jam-pause", room => {
-    if (rooms[room]) rooms[room].playing = false;
-    socket.to(room).emit("jam-pause");
+  socket.on("pause", room => {
+    rooms[room].isPlaying = false;
+    io.to(room).emit("pause");
   });
 
-  socket.on("jam-seek", data => {
-    if (rooms[data.room]) rooms[data.room].time = data.time;
-    socket.to(data.room).emit("jam-seek", data.time);
+  socket.on("seek", ({ room, time }) => {
+    rooms[room].time = time;
+    io.to(room).emit("seek", time);
   });
-
 });
 
-/* ================= API ================= */
-app.get("/api/config", (req, res) => {
-  res.json({ yt: process.env.YOUTUBE_API_KEY });
-});
-
-/* ================= FRONTEND ================= */
+// ================== FRONTEND ==================
 app.get("/", (req, res) => {
 res.send(`<!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pixel Music</title>
-<script src="/socket.io/socket.io.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
+<script src="/socket.io/socket.io.js"></script>
 
 <style>
 body{
-margin:0;
-font-family:Inter,system-ui;
-background:linear-gradient(180deg,#2b0a5a,#0a0014);
-color:white;
-padding-bottom:160px;
+  margin:0;
+  background:radial-gradient(circle at top,#111,#000);
+  color:#fff;
+  font-family:system-ui;
+  padding-bottom:160px;
 }
-.header{padding:22px;font-size:22px;font-weight:700}
-.search{margin:0 20px;background:#1a0033;padding:12px;border-radius:12px}
-.search input{width:100%;background:none;border:none;color:white;font-size:16px}
-.section{padding:20px;font-size:18px;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;padding:0 20px}
-.card{background:#3a1370;padding:12px;border-radius:14px}
-.card img{width:100%;border-radius:10px}
-.card b{display:block;margin-top:8px;font-size:14px}
-.mini{
-position:fixed;bottom:80px;left:12px;right:12px;
-background:linear-gradient(90deg,#6d2cff,#9a6bff);
-border-radius:14px;padding:10px;
-display:flex;align-items:center;gap:12px
+
+.header{
+  padding:20px;
+  font-size:24px;
+  font-weight:700;
 }
-.mini img{width:42px;height:42px;border-radius:8px}
-.play{width:36px;height:36px;background:white;color:black;
-border-radius:50%;display:flex;align-items:center;justify-content:center}
-#full{
-position:fixed;top:100%;left:0;width:100%;height:100%;
-background:linear-gradient(180deg,#7b2cff,#12001f 70%);
-transition:.4s;padding:24px
+
+.search{
+  margin:0 20px;
+  background:#1c1c1c;
+  padding:12px;
+  border-radius:12px;
 }
-#full.active{top:0}
-.big{width:100%;border-radius:16px;margin-top:40px}
-.nav{
-position:fixed;bottom:0;width:100%;height:70px;
-background:#0b0018;display:flex;justify-content:space-around;align-items:center
+.search input{
+  width:100%;
+  background:none;
+  border:none;
+  color:white;
+  font-size:16px;
 }
-#yt{position:absolute;top:-999px}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  padding:20px;
+}
+.card{
+  background:#222;
+  border-radius:14px;
+  overflow:hidden;
+}
+.card img{
+  width:100%;
+}
+.card p{
+  padding:8px;
+  font-size:13px;
+}
+
+/* PLAYER */
+.player-wrap{
+  position:fixed;
+  bottom:20px;
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:center;
+}
+.player{
+  width:92%;
+  max-width:420px;
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(16px);
+  border-radius:24px;
+  padding:16px;
+}
+.track{
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+.track img{
+  width:56px;
+  height:56px;
+  border-radius:12px;
+}
+.controls{
+  display:flex;
+  justify-content:space-between;
+  margin-top:14px;
+}
+.controls button{
+  background:none;
+  border:none;
+  color:white;
+  font-size:22px;
+}
+.main{
+  background:linear-gradient(135deg,#00ffe0,#00aaff);
+  color:black;
+  width:56px;
+  height:56px;
+  border-radius:50%;
+}
+input[type=range]{width:100%;}
 </style>
 </head>
 
 <body>
-<div id="yt"></div>
 
-<div class="header">Pixel Music</div>
-<div class="search"><input id="q" placeholder="Search music" onchange="search()"></div>
+<div id="yt" style="display:none"></div>
 
-<div class="section">🔥 Trending</div>
+<div class="header">PIXEL MUSIC</div>
+
+<div class="search">
+  <input id="q" placeholder="Search music" onkeydown="if(event.key==='Enter')search()">
+</div>
+
 <div class="grid" id="grid"></div>
 
-<div class="section">🎧 Chill</div>
-<div class="grid" id="grid2"></div>
+<!-- PLAYER -->
+<div class="player-wrap">
+  <div class="player">
+    <div class="track">
+      <img id="img">
+      <div>
+        <b id="title">Not Playing</b><br>
+        <small>Pixel Music</small>
+      </div>
+    </div>
 
-<div class="mini" id="mini" style="display:none" onclick="openFull()">
-<img id="mimg"><div><b id="mtitle"></b></div>
-<div class="play" onclick="event.stopPropagation();toggle()">⏸</div>
-<div onclick="toggleJam()">🎧</div>
-</div>
+    <input type="range" id="seek" value="0" onchange="seek(this.value)">
 
-<div id="full">
-<div onclick="closeFull()" style="font-size:28px">⌵</div>
-<img id="fimg" class="big">
-<h2 id="ftitle"></h2>
-<input type="range" id="seek" style="width:100%">
-</div>
+    <div class="controls">
+      <button onclick="jump(-10)">⏪</button>
+      <button onclick="prev()">⏮</button>
+      <button class="main" onclick="toggle()">▶</button>
+      <button onclick="next()">⏭</button>
+      <button onclick="jump(10)">⏩</button>
+    </div>
 
-<div class="nav">
-<div>🏠</div><div>🔍</div><div>🎶</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px">
+      <span onclick="joinJam()">🎧 Jam</span>
+      <span>❤️ Like</span>
+    </div>
+  </div>
 </div>
 
 <script>
-let yt,KEY,timer,queue=[],index=0;
-let socket=io(),JAM=false,ROOM=null;
+let yt, queue=[], index=0;
+let socket = io();
+let ROOM = null;
 
 function onYouTubeIframeAPIReady(){
-yt=new YT.Player("yt",{events:{onReady:init,onStateChange:onState}});
+  yt = new YT.Player("yt",{events:{onStateChange:e=>{
+    if(e.data===1) interval();
+  }}});
 }
 
-async function init(){
-KEY=(await (await fetch("/api/config")).json()).yt;
-fetchSongs("Bollywood Lofi",grid);
-fetchSongs("Chill Hindi Songs",grid2);
+function interval(){
+  setInterval(()=>{
+    seek.value = yt.getCurrentTime();
+  },1000);
 }
 
-async function fetchSongs(q,el){
-const r=await fetch("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&q="+q+"&key="+KEY);
-const d=await r.json(); el.innerHTML="";
-d.items.forEach(x=>{
-el.innerHTML+=\`
-<div class="card" onclick="play('\${x.id.videoId}','\${x.snippet.title}','\${x.snippet.thumbnails.high.url}')">
-<img src="\${x.snippet.thumbnails.high.url}">
-<b>\${x.snippet.title.slice(0,28)}</b>
-</div>\`;
-queue.push(x.id.videoId);
-});
-}
-
-function play(id,t,img){
-mini.style.display="flex";
-mtitle.innerText=ftitle.innerText=t;
-mimg.src=fimg.src=img;
-yt.loadVideoById(id);
-if(JAM) socket.emit("jam-play",{room:ROOM,videoId:id,time:0});
+function play(id,title,img){
+  document.getElementById("title").innerText=title;
+  document.getElementById("img").src=img;
+  yt.loadVideoById(id);
+  if(ROOM) socket.emit("play",{room:ROOM,videoId:id});
 }
 
 function toggle(){
-yt.getPlayerState()==1?yt.pauseVideo():yt.playVideo();
-if(JAM) socket.emit("jam-pause",ROOM);
+  yt.getPlayerState()==1 ? yt.pauseVideo() : yt.playVideo();
 }
 
-function onState(e){
-if(e.data===1){
-seek.max=yt.getDuration();
-clearInterval(timer);
-timer=setInterval(()=>seek.value=yt.getCurrentTime(),1000);
-}
-if(e.data===0){ // autoplay next
-index=(index+1)%queue.length;
-yt.loadVideoById(queue[index]);
-}
+function seek(v){
+  yt.seekTo(v,true);
+  if(ROOM) socket.emit("seek",{room:ROOM,time:v});
 }
 
-seek.onchange=()=>{
-yt.seekTo(seek.value,true);
-if(JAM) socket.emit("jam-seek",{room:ROOM,time:seek.value});
+function jump(s){
+  seek(yt.getCurrentTime()+s);
 }
 
-function toggleJam(){
-ROOM=prompt("Enter Jam Code");
-JAM=true;
-socket.emit("join-jam",ROOM);
+function next(){
+  index=(index+1)%queue.length;
+  yt.loadVideoById(queue[index]);
 }
 
-socket.on("jam-play",d=>yt.loadVideoById(d.videoId,d.time));
-socket.on("jam-pause",()=>yt.pauseVideo());
-socket.on("jam-seek",t=>yt.seekTo(t,true));
+function prev(){
+  index=index<=0?queue.length-1:index-1;
+  yt.loadVideoById(queue[index]);
+}
 
-function search(){fetchSongs(q.value,grid);}
-function openFull(){full.classList.add("active")}
-function closeFull(){full.classList.remove("active")}
+async function search(){
+  let q=document.getElementById("q").value;
+  let r=await fetch("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q="+q+"&key=${process.env.YT}");
+  let d=await r.json();
+  queue=[];
+  grid.innerHTML="";
+  d.items.forEach(v=>{
+    queue.push(v.id.videoId);
+    grid.innerHTML+=\`
+      <div class="card" onclick="play('\${v.id.videoId}','\${v.snippet.title.replace(/'/g,'')}','\${v.snippet.thumbnails.high.url}')">
+        <img src="\${v.snippet.thumbnails.high.url}">
+        <p>\${v.snippet.title}</p>
+      </div>\`;
+  });
+}
+
+function joinJam(){
+  ROOM = prompt("Enter Jam Code");
+  socket.emit("join",ROOM);
+}
+
+socket.on("play",id=>yt.loadVideoById(id));
+socket.on("pause",()=>yt.pauseVideo());
+socket.on("seek",t=>yt.seekTo(t,true));
+socket.on("sync",s=>{
+  if(s.videoId) yt.loadVideoById(s.videoId,s.time);
+});
 </script>
 </body>
 </html>`);
 });
 
+// ================== START ==================
 server.listen(process.env.PORT || 5000, () =>
-  console.log("🚀 Pixel Music LIVE")
+  console.log("🎧 Pixel Music Live")
 );
