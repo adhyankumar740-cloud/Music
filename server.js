@@ -13,17 +13,16 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
-.then(()=>console.log("MongoDB Connected"))
+.then(()=>console.log("MongoDB connected"))
 .catch(err=>console.error(err));
 
 // Schemas
 const UserSchema = new mongoose.Schema({
     username:{type:String,unique:true},
     password:String,
-    liked: [String],
-    recent: [String]
+    liked:[String],
+    recent:[String]
 });
 const User = mongoose.model("User", UserSchema);
 
@@ -43,9 +42,9 @@ const RoomSchema = new mongoose.Schema({
 const Room = mongoose.model("Room", RoomSchema);
 
 // Serve frontend
-app.get("/", (req,res)=>res.sendFile(__dirname+"/index.html"));
+app.get("/",(req,res)=>res.sendFile(__dirname+"/index.html"));
 
-// API Endpoints
+// API
 app.get("/api/config",(req,res)=>res.json({yt:process.env.YOUTUBE_API_KEY}));
 
 app.post("/api/register", async(req,res)=>{
@@ -81,7 +80,7 @@ app.get("/api/playlists/:username", async(req,res)=>{
     res.json(p);
 });
 
-// Socket.IO - Jam Mode
+// Socket.IO Jam Mode
 io.on("connection", socket=>{
     socket.on("join", async roomId=>{
         socket.join(roomId);
