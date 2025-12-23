@@ -8,35 +8,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log("System Ready"));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log("Spotify Clone Ready"));
 
-const User = mongoose.model('User', { 
-    username: {type: String, unique: true}, 
-    password: {type: String},
-    preference: String 
-});
+const User = mongoose.model('User', { username: {type: String, unique: true}, password: {type: String}, pref: String });
 const Song = mongoose.model('Song', { title: String, videoId: String, thumbnail: String, artist: String, owner: String });
 
-// APIs
 app.get('/api/config', (req, res) => res.json({ yt_key: process.env.YOUTUBE_API_KEY }));
-
 app.post('/api/register', async (req, res) => {
-    try {
-        const hash = await bcrypt.hash(req.body.password, 10);
-        await new User({ username: req.body.username, password: hash, preference: req.body.pref }).save();
-        res.json({ m: "success" });
-    } catch (e) { res.status(400).json({ m: "Error" }); }
+    const hash = await bcrypt.hash(req.body.password, 10);
+    await new User({ username: req.body.username, password: hash, pref: req.body.pref }).save();
+    res.json({ m: "success" });
 });
-
 app.post('/api/login', async (req, res) => {
     const user = await User.findOne({ username: req.body.username });
-    if (user && await bcrypt.compare(req.body.password, user.password)) {
-        res.json({ m: "ok", username: user.username, pref: user.preference });
-    } else { res.status(401).json({ m: "Fail" }); }
+    if (user && await bcrypt.compare(req.body.password, user.password)) res.json({ m: "ok", username: user.username, pref: user.pref });
+    else res.status(401).send();
 });
-
-app.get('/api/playlist', async (req, res) => res.json(await Song.find({ owner: req.query.user })));
-app.post('/api/playlist', async (req, res) => { await new Song(req.body).save(); res.json({ m: "ok" }); });
 
 app.get('/', (req, res) => {
     res.send(`
@@ -45,222 +32,169 @@ app.get('/', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Tech Music</title>
+    <title>Pixel Spotify</title>
     <script src="https://www.youtube.com/iframe_api"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap');
-        :root { --neon: #bc13fe; --bg: #030005; --card: rgba(20, 10, 30, 0.7); }
-        body { background: var(--bg); color: white; font-family: 'Inter', sans-serif; margin: 0; overflow-x: hidden; }
+        :root { --sp-green: #1DB954; --sp-black: #121212; --sp-card: #181818; --sp-player: #5c1a1a; }
+        body { background: #000; color: white; font-family: 'Circular Std', sans-serif, Arial; margin: 0; padding-bottom: 180px; }
         
-        /* High Tech UI Elements */
-        .neon-text { font-family: 'Orbitron', sans-serif; color: var(--neon); text-shadow: 0 0 10px var(--neon); }
-        .glass { background: var(--card); backdrop-filter: blur(15px); border: 1px solid rgba(188, 19, 254, 0.2); border-radius: 20px; }
+        .header { padding: 40px 20px 20px; font-size: 24px; font-weight: bold; }
+        .search-box { margin: 0 20px; background: #242424; padding: 12px; border-radius: 8px; display: flex; align-items: center; color: #b3b3b3; }
+        .search-box input { background: transparent; border: none; color: white; width: 100%; outline: none; margin-left: 10px; }
 
-        /* Auth/Preference Screen */
-        #auth { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: flex; align-items: center; justify-content: center; }
-        .auth-box { width: 85%; max-width: 400px; padding: 30px; text-align: center; }
-        select, input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #333; background: #111; color: white; box-sizing: border-box; }
-        .cyber-btn { width: 100%; padding: 15px; border-radius: 10px; border: none; background: var(--neon); color: white; font-family: 'Orbitron'; cursor: pointer; box-shadow: 0 0 15px var(--neon); }
+        /* Screenshot style Grid - Discover Section */
+        .section-label { padding: 25px 20px 10px; font-size: 18px; font-weight: bold; }
+        .discover-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            grid-template-rows: repeat(4, 180px); /* 4 rows as requested */
+            gap: 15px; padding: 0 20px; 
+        }
+        .discover-card { 
+            background: linear-gradient(to bottom, #333, #181818); 
+            border-radius: 12px; overflow: hidden; position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .discover-card img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+        .discover-card .tag { position: absolute; bottom: 10px; left: 10px; font-weight: bold; font-size: 14px; text-shadow: 2px 2px 4px #000; }
 
-        /* Home Content */
-        .top-bar { padding: 25px; display: flex; justify-content: space-between; align-items: center; }
-        .search-container { padding: 0 20px; }
-        .search-input { width: 100%; padding: 15px 25px; border-radius: 30px; background: var(--card); border: 1px solid #333; color: white; outline: none; }
+        /* Native Player Bar - Screenshot Clone */
+        .native-player { 
+            position: fixed; bottom: 80px; left: 8px; right: 8px; 
+            background: var(--sp-player); border-radius: 10px; height: 65px;
+            display: flex; align-items: center; padding: 0 12px; z-index: 1000;
+        }
+        .native-player img { width: 45px; height: 45px; border-radius: 6px; margin-right: 12px; }
+        .song-meta { flex: 1; overflow: hidden; }
+        .song-meta b { font-size: 13px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-meta span { font-size: 11px; color: #ccc; }
+        .p-controls { display: flex; align-items: center; gap: 15px; }
+        .play-btn { font-size: 24px; color: white; cursor: pointer; }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 20px; }
-        .card { position: relative; overflow: hidden; border-radius: 15px; background: #111; border-bottom: 3px solid var(--neon); }
-        .card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; transition: 0.5s; }
-        .card-body { padding: 10px; background: linear-gradient(transparent, black); position: absolute; bottom: 0; width: 100%; }
-        .card b { font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* Full Screen Tech Player */
-        #player-ui { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 1500; transition: 0.6s cubic-bezier(0.19, 1, 0.22, 1); padding: 40px 20px; box-sizing: border-box; text-align: center; }
-        #player-ui.active { top: 0; }
-        .art-glow { width: 280px; height: 280px; border-radius: 50%; margin: 40px auto; position: relative; box-shadow: 0 0 50px var(--neon); }
-        .art-glow img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; animation: rotate 20s linear infinite; }
+        /* Full Screen UI - Screenshot 2 Clone */
+        #full-player { 
+            position: fixed; top: 100%; left: 0; width: 100%; height: 100%; 
+            background: linear-gradient(to bottom, #2a4d46, #121212); 
+            z-index: 2000; transition: 0.5s ease; padding: 40px 25px; box-sizing: border-box;
+        }
+        #full-player.active { top: 0; }
+        .big-art { width: 100%; aspect-ratio: 1/1; border-radius: 10px; margin-top: 40px; box-shadow: 0 15px 50px rgba(0,0,0,0.5); }
+        .seek-container { width: 100%; margin-top: 50px; }
+        input[type=range] { width: 100%; accent-color: white; }
         
-        @keyframes rotate { from {transform: rotate(0deg);} to {transform: rotate(360deg);} }
+        #yt-hidden { position: absolute; top: -1000px; visibility: hidden; }
 
-        /* Real Slider */
-        .controls-container { width: 100%; margin-top: 40px; }
-        .time-info { display: flex; justify-content: space-between; font-family: 'Orbitron'; font-size: 10px; color: var(--neon); margin-bottom: 10px; }
-        #seek-bar { width: 100%; height: 6px; -webkit-appearance: none; background: #222; border-radius: 5px; outline: none; }
-        #seek-bar::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; background: var(--neon); border-radius: 50%; cursor: pointer; box-shadow: 0 0 10px var(--neon); }
-
-        /* Hidden YT Video */
-        #yt-player-hidden { position: absolute; top: -1000px; left: -1000px; width: 1px; height: 1px; visibility: hidden; }
-
-        .nav-bottom { position: fixed; bottom: 0; width: 100%; height: 70px; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid var(--neon); }
+        /* Bottom Nav */
+        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 75px; background: rgba(0,0,0,0.95); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #222; }
     </style>
 </head>
 <body>
-    <div id="yt-player-hidden"></div>
+    <div id="yt-hidden"></div>
 
-    <div id="auth">
-        <div class="auth-box glass">
-            <h1 class="neon-text">PIXEL TECH</h1>
-            <div id="login-fields">
-                <input id="u" placeholder="USERNAME">
-                <input id="p" type="password" placeholder="PASSWORD">
-                <select id="pref">
-                    <option value="New Bollywood 2024">Bollywood Hits</option>
-                    <option value="Lofi Hip Hop Mix">Lofi Vibes</option>
-                    <option value="Punjabi Latest">Punjabi Tadka</option>
-                    <option value="Arijit Singh Hits">Romantic (Arijit)</option>
-                </select>
-                <button class="cyber-btn" onclick="auth('login')">INITIALIZE LOGIN</button>
-                <p onclick="auth('register')" style="font-size:10px; margin-top:15px; cursor:pointer;">NEW SYSTEM? CREATE ACCOUNT</p>
-            </div>
+    <div class="header">Search</div>
+    <div class="search-box">🔍 <input id="q" placeholder="What do you want to listen to?" onchange="search()"></div>
+
+    <div class="section-label">Discover something new</div>
+    <div class="discover-grid" id="grid">
+        </div>
+
+    <div class="native-player" id="mini-player" onclick="toggleFull(true)" style="display:none">
+        <img id="m-img" src="">
+        <div class="song-meta">
+            <b id="m-title">Song Name</b>
+            <span id="m-artist">Artist Name</span>
+        </div>
+        <div class="p-controls">
+            <span style="font-size:20px">🎧</span>
+            <span style="font-size:20px">+</span>
+            <span class="play-btn" onclick="event.stopPropagation(); playPause()">⏸</span>
         </div>
     </div>
 
-    <div class="top-bar">
-        <h2 class="neon-text">SYSTEM ACTIVE</h2>
-        <div style="font-size: 20px;">🎧</div>
-    </div>
-
-    <div class="search-container">
-        <input class="search-input" id="q" placeholder="ENTER FREQUENCY (SEARCH)..." onchange="search()">
-    </div>
-
-    <div id="grid" class="grid"></div>
-
-    <div id="player-ui" class="glass">
-        <div onclick="togglePlayer(false)" style="font-size:30px; text-align:left;">✕</div>
-        <div class="art-glow">
-            <img id="big-img" src="">
+    <div id="full-player">
+        <div onclick="toggleFull(false)" style="font-size:30px">⌵</div>
+        <img id="f-img" class="big-art" src="">
+        <div style="margin-top:30px">
+            <h2 id="f-title" style="margin:0">Song Title</h2>
+            <p id="f-artist" style="color:#b3b3b3">Artist Name</p>
         </div>
-        <h2 id="big-title" class="neon-text" style="font-size:18px; margin-top:20px;">LOADING...</h2>
-        <p id="big-artist" style="color:#888;">ARTIST UNKNOWN</p>
-
-        <div class="controls-container">
-            <div class="time-info">
-                <span id="current-time">0:00</span>
-                <span id="duration">0:00</span>
+        <div class="seek-container">
+            <input type="range" id="seek" value="0" step="1" onchange="seekTo(this.value)">
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px">
+                <span id="cur">0:00</span><span id="dur">0:00</span>
             </div>
-            <input type="range" id="seek-bar" value="0" step="1" onchange="seek(this.value)">
-            
-            <div style="display:flex; justify-content:center; gap:40px; margin-top:30px; font-size:40px;">
-                <span onclick="playPause()" id="play-icon" style="cursor:pointer; color:var(--neon);">⏸</span>
-            </div>
+        </div>
+        <div style="display:flex; justify-content:space-around; align-items:center; margin-top:40px">
+            <span style="font-size:30px">🔀</span>
+            <span style="font-size:40px">⏮</span>
+            <span style="font-size:70px" onclick="playPause()">⏸</span>
+            <span style="font-size:40px">⏭</span>
+            <span style="font-size:30px">🔁</span>
         </div>
     </div>
 
-    <div class="nav-bottom">
-        <div onclick="location.reload()" style="color:var(--neon)">🏠</div>
-        <div onclick="loadLib()">📁</div>
-        <div onclick="logout()">⚙️</div>
+    <div class="nav-bar">
+        <div onclick="location.reload()">🏠<br><small>Home</small></div>
+        <div onclick="search()">🔍<br><small>Search</small></div>
+        <div onclick="loadLib()">📚<br><small>Library</small></div>
     </div>
 
     <script>
-        let ytPlayer;
-        let KEY = "";
-        let USER = localStorage.getItem('pixelUser');
-        let PREF = localStorage.getItem('pixelPref') || "Top Hits";
-
-        if(USER) document.getElementById('auth').style.display='none';
-
-        // Initialize YouTube Player Hidden
+        let yt; let KEY = ""; let USER = localStorage.getItem('pixelUser');
         function onYouTubeIframeAPIReady() {
-            ytPlayer = new YT.Player('yt-player-hidden', {
-                events: {
-                    'onStateChange': onPlayerStateChange,
-                    'onReady': onPlayerReady
-                }
-            });
+            yt = new YT.Player('yt-hidden', { events: { 'onReady': init, 'onStateChange': onState } });
         }
 
-        async function onPlayerReady() {
-            const r = await fetch('/api/config');
-            const d = await r.json(); KEY = d.yt_key;
-            fetchSongs(PREF);
-        }
-
-        async function auth(type) {
-            const u = document.getElementById('u').value, p = document.getElementById('p').value, pr = document.getElementById('pref').value;
-            const r = await fetch('/api/'+type, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p, pref:pr}) });
-            if(r.ok) { 
-                if(type==='login') { 
-                    const d = await r.json();
-                    localStorage.setItem('pixelUser', d.username); 
-                    localStorage.setItem('pixelPref', d.pref); 
-                    location.reload(); 
-                } else alert("Reg Successful!");
-            }
+        async function init() {
+            const r = await fetch('/api/config'); const d = await r.json(); KEY = d.yt_key;
+            fetchSongs("Bollywood LoFi 2024");
         }
 
         async function fetchSongs(q) {
-            const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&q='+q+'&type=video&maxResults=20&key='+KEY);
-            const d = await r.json(); render(d.items, true);
+            const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&q='+q+'&type=video&maxResults=8&key='+KEY);
+            const d = await r.json(); render(d.items);
         }
 
-        function render(songs, isS) {
+        function render(songs) {
             const g = document.getElementById('grid'); g.innerHTML = '';
             songs.forEach(s => {
-                const vid = isS ? s.id.videoId : s.videoId;
-                const t = (isS ? s.snippet.title : s.title).replace(/'/g,"");
-                const img = isS ? s.snippet.thumbnails.medium.url : s.thumbnail;
-                const art = isS ? s.snippet.channelTitle : (s.artist || "System");
+                const vid = s.id.videoId; const t = s.snippet.title; const img = s.snippet.thumbnails.high.url;
                 g.innerHTML += \`
-                    <div class="card" onclick="openPlayer('\${vid}', '\${t}', '\${img}', '\${art}')">
-                        <img src="\${img}">
-                        <div class="card-body">
-                            <b>\${t}</b>
-                            \${isS ? \`<button onclick="event.stopPropagation();save('\${vid}','\${t}','\${img}','\${art}')" style="background:var(--neon); border:none; color:white; border-radius:50%; position:absolute; right:10px; top:10px;">+</button>\`:''}
-                        </div>
-                    </div>\`;
+                <div class="discover-card" onclick="play('\${vid}','\${t.replace(/'/g,"")}','\${img}')">
+                    <img src="\${img}">
+                    <div class="tag">\${t.substring(0,20)}...</div>
+                </div>\`;
             });
         }
 
-        function openPlayer(id, t, img, art) {
-            document.getElementById('player-ui').classList.add('active');
-            document.getElementById('big-img').src = img;
-            document.getElementById('big-title').innerText = t;
-            document.getElementById('big-artist').innerText = art;
-            ytPlayer.loadVideoById(id);
+        function play(id, t, img) {
+            document.getElementById('mini-player').style.display = 'flex';
+            document.getElementById('m-title').innerText = document.getElementById('f-title').innerText = t;
+            document.getElementById('m-img').src = document.getElementById('f-img').src = img;
+            yt.loadVideoById(id);
+            toggleFull(true);
         }
 
-        function togglePlayer(show) { document.getElementById('player-ui').classList.toggle('active', show); }
-
-        // Real Slider Logic
-        function onPlayerStateChange(event) {
-            if (event.data == YT.PlayerState.PLAYING) {
-                const duration = ytPlayer.getDuration();
-                document.getElementById('duration').innerText = formatTime(duration);
-                document.getElementById('seek-bar').max = duration;
-                setInterval(updateProgress, 1000);
+        function onState(e) {
+            if(e.data == 1) {
+                document.getElementById('dur').innerText = format(yt.getDuration());
+                document.getElementById('seek').max = yt.getDuration();
+                setInterval(() => {
+                    document.getElementById('cur').innerText = format(yt.getCurrentTime());
+                    document.getElementById('seek').value = yt.getCurrentTime();
+                }, 1000);
             }
         }
 
-        function updateProgress() {
-            const current = ytPlayer.getCurrentTime();
-            document.getElementById('current-time').innerText = formatTime(current);
-            document.getElementById('seek-bar').value = current;
-        }
-
-        function seek(val) { ytPlayer.seekTo(val, true); }
-
-        function formatTime(s) {
-            let m = Math.floor(s / 60);
-            s = Math.floor(s % 60);
-            return m + ":" + (s < 10 ? '0' + s : s);
-        }
-
-        function playPause() {
-            const state = ytPlayer.getPlayerState();
-            if(state == 1) { ytPlayer.pauseVideo(); document.getElementById('play-icon').innerText = '▶'; }
-            else { ytPlayer.playVideo(); document.getElementById('play-icon').innerText = '⏸'; }
-        }
-
-        async function save(v,t,i,a) { await fetch('/api/playlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({videoId:v,title:t,thumbnail:i, artist:a, owner:USER})}); }
-        async function loadLib() { const r = await fetch('/api/playlist?user='+USER); render(await r.json(), false); }
-        async function search() { fetchSongs(document.getElementById('q').value); }
-        function logout() { localStorage.clear(); location.reload(); }
+        function format(s) { let m = Math.floor(s/60); s = Math.floor(s%60); return m+":"+(s<10?'0'+s:s); }
+        function toggleFull(s) { document.getElementById('full-player').classList.toggle('active', s); }
+        function playPause() { yt.getPlayerState() == 1 ? yt.pauseVideo() : yt.playVideo(); }
+        function seekTo(v) { yt.seekTo(v); }
+        function search() { fetchSongs(document.getElementById('q').value); }
     </script>
 </body>
 </html>
     `);
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT);
+app.listen(process.env.PORT || 5000);
