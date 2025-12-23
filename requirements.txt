@@ -1,9 +1,0 @@
-flask[async]
-python-telegram-bot[webhooks]
-httpx
-python-dotenv  
-Flask-SocketIO
-uvicorn
-requests
-asgiref
-flask-cors
