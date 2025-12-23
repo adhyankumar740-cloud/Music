@@ -1,4 +1,3 @@
-// ================== PIXEL MUSIC ==================
 require("dotenv").config();
 const express = require("express");
 const http = require("http");
@@ -7,44 +6,33 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server);
 
 app.use(cors());
 app.use(express.json());
 
-// ================== JAM ROOMS ==================
-let rooms = {}; 
-/*
-rooms = {
-  roomId: {
-    videoId,
-    time,
-    isPlaying
-  }
-}
-*/
+/* ================= JAM STATE ================= */
+const rooms = {};
 
-// ================== SOCKET ==================
+/* ================= SOCKET ================= */
 io.on("connection", socket => {
 
   socket.on("join", room => {
     socket.join(room);
     if (!rooms[room]) {
-      rooms[room] = { videoId: null, time: 0, isPlaying: false };
+      rooms[room] = { videoId: null, time: 0, playing: false };
     }
     socket.emit("sync", rooms[room]);
   });
 
   socket.on("play", ({ room, videoId }) => {
     rooms[room].videoId = videoId;
-    rooms[room].isPlaying = true;
+    rooms[room].playing = true;
     io.to(room).emit("play", videoId);
   });
 
   socket.on("pause", room => {
-    rooms[room].isPlaying = false;
+    rooms[room].playing = false;
     io.to(room).emit("pause");
   });
 
@@ -54,36 +42,43 @@ io.on("connection", socket => {
   });
 });
 
-// ================== FRONTEND ==================
-app.get("/", (req, res) => {
+/* ================= FRONTEND ================= */
+app.get("/", (_, res) => {
 res.send(`<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pixel Music</title>
+
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="/socket.io/socket.io.js"></script>
 
 <style>
+:root{
+  --bg:#121212;
+  --card:#181818;
+  --green:#1DB954;
+  --text:#fff;
+  --sub:#B3B3B3;
+}
+*{box-sizing:border-box}
 body{
   margin:0;
-  background:radial-gradient(circle at top,#111,#000);
-  color:#fff;
-  font-family:system-ui;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system;
   padding-bottom:160px;
 }
-
 .header{
-  padding:20px;
-  font-size:24px;
+  padding:18px;
+  font-size:22px;
   font-weight:700;
 }
-
 .search{
-  margin:0 20px;
-  background:#1c1c1c;
+  margin:0 16px;
+  background:#242424;
+  border-radius:8px;
   padding:12px;
-  border-radius:12px;
 }
 .search input{
   width:100%;
@@ -92,57 +87,59 @@ body{
   color:white;
   font-size:16px;
 }
-
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:14px;
-  padding:20px;
+  padding:16px;
 }
 .card{
-  background:#222;
-  border-radius:14px;
+  background:var(--card);
+  border-radius:8px;
   overflow:hidden;
 }
-.card img{
-  width:100%;
-}
+.card img{width:100%}
 .card p{
   padding:8px;
   font-size:13px;
+  color:var(--sub);
 }
 
-/* PLAYER */
+/* ===== PLAYER ===== */
 .player-wrap{
   position:fixed;
-  bottom:20px;
+  bottom:0;
   left:0;
   right:0;
-  display:flex;
-  justify-content:center;
+  background:#181818;
+  border-top:1px solid #282828;
 }
 .player{
-  width:92%;
-  max-width:420px;
-  background:rgba(255,255,255,0.08);
-  backdrop-filter:blur(16px);
-  border-radius:24px;
-  padding:16px;
+  max-width:480px;
+  margin:auto;
+  padding:10px;
 }
 .track{
   display:flex;
-  gap:12px;
+  gap:10px;
   align-items:center;
 }
 .track img{
-  width:56px;
-  height:56px;
-  border-radius:12px;
+  width:48px;
+  height:48px;
+  border-radius:4px;
+}
+.track b{font-size:14px}
+.track small{color:var(--sub)}
+input[type=range]{
+  width:100%;
+  accent-color:var(--green);
 }
 .controls{
   display:flex;
-  justify-content:space-between;
-  margin-top:14px;
+  justify-content:space-around;
+  align-items:center;
+  margin-top:8px;
 }
 .controls button{
   background:none;
@@ -150,14 +147,19 @@ body{
   color:white;
   font-size:22px;
 }
-.main{
-  background:linear-gradient(135deg,#00ffe0,#00aaff);
+.play{
+  background:var(--green);
   color:black;
-  width:56px;
-  height:56px;
+  width:48px;
+  height:48px;
   border-radius:50%;
 }
-input[type=range]{width:100%;}
+.extra{
+  display:flex;
+  justify-content:space-between;
+  font-size:12px;
+  color:var(--sub);
+}
 </style>
 </head>
 
@@ -165,10 +167,11 @@ input[type=range]{width:100%;}
 
 <div id="yt" style="display:none"></div>
 
-<div class="header">PIXEL MUSIC</div>
+<div class="header">Pixel Music</div>
 
 <div class="search">
-  <input id="q" placeholder="Search music" onkeydown="if(event.key==='Enter')search()">
+  <input id="q" placeholder="Search songs, artists" 
+  onkeydown="if(event.key==='Enter')search()">
 </div>
 
 <div class="grid" id="grid"></div>
@@ -184,17 +187,17 @@ input[type=range]{width:100%;}
       </div>
     </div>
 
-    <input type="range" id="seek" value="0" onchange="seek(this.value)">
+    <input type="range" id="seek" value="0">
 
     <div class="controls">
       <button onclick="jump(-10)">⏪</button>
       <button onclick="prev()">⏮</button>
-      <button class="main" onclick="toggle()">▶</button>
+      <button class="play" onclick="toggle()">▶</button>
       <button onclick="next()">⏭</button>
       <button onclick="jump(10)">⏩</button>
     </div>
 
-    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px">
+    <div class="extra">
       <span onclick="joinJam()">🎧 Jam</span>
       <span>❤️ Like</span>
     </div>
@@ -203,22 +206,16 @@ input[type=range]{width:100%;}
 
 <script>
 let yt, queue=[], index=0;
-let socket = io();
-let ROOM = null;
+let socket=io(), ROOM=null;
 
 function onYouTubeIframeAPIReady(){
-  yt = new YT.Player("yt",{events:{onStateChange:e=>{
-    if(e.data===1) interval();
+  yt=new YT.Player("yt",{events:{onStateChange:e=>{
+    if(e.data===1) setInterval(()=>seek.value=yt.getCurrentTime(),1000);
   }}});
 }
 
-function interval(){
-  setInterval(()=>{
-    seek.value = yt.getCurrentTime();
-  },1000);
-}
-
 function play(id,title,img){
+  title=title.replace(/'/g,'');
   document.getElementById("title").innerText=title;
   document.getElementById("img").src=img;
   yt.loadVideoById(id);
@@ -226,23 +223,19 @@ function play(id,title,img){
 }
 
 function toggle(){
-  yt.getPlayerState()==1 ? yt.pauseVideo() : yt.playVideo();
-}
-
-function seek(v){
-  yt.seekTo(v,true);
-  if(ROOM) socket.emit("seek",{room:ROOM,time:v});
+  yt.getPlayerState()==1?yt.pauseVideo():yt.playVideo();
 }
 
 function jump(s){
-  seek(yt.getCurrentTime()+s);
+  let t=yt.getCurrentTime()+s;
+  yt.seekTo(t,true);
+  if(ROOM) socket.emit("seek",{room:ROOM,time:t});
 }
 
 function next(){
   index=(index+1)%queue.length;
   yt.loadVideoById(queue[index]);
 }
-
 function prev(){
   index=index<=0?queue.length-1:index-1;
   yt.loadVideoById(queue[index]);
@@ -250,23 +243,31 @@ function prev(){
 
 async function search(){
   let q=document.getElementById("q").value;
-  let r=await fetch("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q="+q+"&key=${process.env.YT}");
+  let r=await fetch(
+    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=12&q="+
+    encodeURIComponent(q)+
+    "&key=${process.env.YT}"
+  );
   let d=await r.json();
-  queue=[];
   grid.innerHTML="";
+  queue=[];
   d.items.forEach(v=>{
     queue.push(v.id.videoId);
     grid.innerHTML+=\`
-      <div class="card" onclick="play('\${v.id.videoId}','\${v.snippet.title.replace(/'/g,'')}','\${v.snippet.thumbnails.high.url}')">
-        <img src="\${v.snippet.thumbnails.high.url}">
-        <p>\${v.snippet.title}</p>
-      </div>\`;
+    <div class="card" onclick="play(
+      '\${v.id.videoId}',
+      '\${v.snippet.title}',
+      '\${v.snippet.thumbnails.high.url}'
+    )">
+      <img src="\${v.snippet.thumbnails.high.url}">
+      <p>\${v.snippet.title}</p>
+    </div>\`;
   });
 }
 
 function joinJam(){
-  ROOM = prompt("Enter Jam Code");
-  socket.emit("join",ROOM);
+  ROOM=prompt("Enter Jam Code");
+  if(ROOM) socket.emit("join",ROOM);
 }
 
 socket.on("play",id=>yt.loadVideoById(id));
@@ -276,11 +277,12 @@ socket.on("sync",s=>{
   if(s.videoId) yt.loadVideoById(s.videoId,s.time);
 });
 </script>
+
 </body>
 </html>`);
 });
 
-// ================== START ==================
+/* ================= START ================= */
 server.listen(process.env.PORT || 5000, () =>
-  console.log("🎧 Pixel Music Live")
+  console.log("🎧 Pixel Music running")
 );
