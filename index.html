@@ -8,11 +8,11 @@
 
 <style>
 body{margin:0;font-family:Arial;background:#121212;color:#fff;}
-.header{padding:20px;font-size:24px;font-weight:bold;text-align:center;}
+.header{text-align:center;padding:20px;font-size:24px;font-weight:bold;}
 #loginPanel,#app{display:none;}
 input,button{padding:8px;margin:5px;border-radius:5px;border:none;}
 button{cursor:pointer;background:#1DB954;color:#000;font-weight:bold;}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;overflow-y:auto;max-height:50vh;}
 .card{background:#181818;border-radius:10px;overflow:hidden;cursor:pointer;}
 .card img{width:100%;}
 .card p{margin:5px;font-size:14px;}
@@ -21,6 +21,7 @@ button{cursor:pointer;background:#1DB954;color:#000;font-weight:bold;}
 .controls button{font-size:22px;}
 </style>
 </head>
+
 <body>
 <div class="header">Pixel Music</div>
 
@@ -35,7 +36,9 @@ button{cursor:pointer;background:#1DB954;color:#000;font-weight:bold;}
 
 <div id="app">
 <div id="current-song" style="text-align:center;margin-bottom:5px;">No song playing</div>
-<div class="grid" id="grid"></div>
+<div class="grid" id="grid">
+<p id="loading">Loading songs...</p>
+</div>
 <div>
 <h4>Playlists</h4>
 <input id="plName" placeholder="New Playlist"><button onclick="createPlaylist()">Add</button>
@@ -58,7 +61,7 @@ button{cursor:pointer;background:#1DB954;color:#000;font-weight:bold;}
 let yt, playing=false, videoId="", room="pixel", user=null;
 const socket=io();
 
-// YouTube Player API
+// YouTube Player
 function onYouTubeIframeAPIReady(){yt=new YT.Player("yt",{events:{onReady:init,onStateChange:onPlayerState}});}
 
 // Login/Register
@@ -77,11 +80,12 @@ function login(){
 }
 function loginMsg(msg){document.getElementById("loginMsg").innerText=msg;}
 
-// YouTube + Render Search
+// YouTube + Fetch Songs
 async function init(){
     const r=await fetch("/api/config"); const d=await r.json();
     const res=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=bollywood&type=video&maxResults=8&key=${d.yt}`);
-    const data=await res.json(); renderSongs(data.items);
+    const data=await res.json();
+    renderSongs(data.items);
 }
 
 function renderSongs(list){
@@ -111,7 +115,7 @@ function playPause(){
     playing=!playing;
 }
 
-// Seek ±10s
+// Seek
 function seek(t){if(!videoId) return; yt.seekTo(yt.getCurrentTime()+t,true); socket.emit("seek",{roomId:room,time:yt.getCurrentTime()});}
 
 // Player State
@@ -133,11 +137,9 @@ socket.on("seek",t=>{yt.seekTo(t,true);});
 async function createPlaylist(){
     const name=document.getElementById("plName").value;
     if(!name) return;
-    const res=await fetch("/api/playlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:user.username,name})});
-    const pl=await res.json();
+    await fetch("/api/playlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:user.username,name})});
     loadPlaylists();
 }
-
 async function loadPlaylists(){
     const res=await fetch("/api/playlists/"+user.username);
     const pls=await res.json();
@@ -150,7 +152,6 @@ async function loadPlaylists(){
         container.innerHTML+=html;
     });
 }
-
 async function addToPlaylist(id){
     if(!videoId) return alert("No song playing");
     await fetch("/api/playlist/add",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,videoId})});
