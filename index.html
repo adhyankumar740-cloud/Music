@@ -3,184 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Pixel Music Pro - Purple Edition</title>
+    <title>Pixel Music Pro Max</title>
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        :root { --green: #1DB954; --purple: #6a1b9a; --black: #000; --text-main: #fff; --text-dim: #b3b3b3; }
+        :root { 
+            --accent: #1DB954; --purple-glow: #8e24aa; --glass: rgba(255, 255, 255, 0.1);
+            --bg-dark: #050505; --iphone-red: #ff3b30;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
         
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { 
-            margin: 0; font-family: 'Segoe UI', sans-serif; 
-            background: var(--black); color: var(--text-main); 
-            overflow: hidden; height: 100dvh; 
+            margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica;
+            background: var(--bg-dark); color: white; overflow: hidden; height: 100dvh;
         }
 
-        /* Animated Purple Background */
-        #bg-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: radial-gradient(circle at 50% 50%, #4a148c 0%, #000 100%); 
-            z-index: -1; transition: 1.5s ease; opacity: 0.8;
-            animation: pulseBg 8s infinite alternate;
+        /* 🌌 Deep Purple Animated Background */
+        #bg-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 20% 30%, #311b92 0%, #000 70%);
+            z-index: -1; animation: bgShift 15s infinite alternate;
         }
-        @keyframes pulseBg {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.1); }
+        @keyframes bgShift { 0% { transform: scale(1); } 100% { transform: scale(1.2) rotate(5deg); } }
+
+        /* ✨ Floating Animation */
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .float { animation: float 4s ease-in-out infinite; }
+
+        /* 📱 Top Header */
+        header { padding: 50px 20px 10px; display: flex; justify-content: space-between; align-items: center; }
+        .logo-box { display: flex; align-items: center; gap: 10px; }
+        .logo-circle { width: 45px; height: 45px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px var(--accent); }
+        .logo-text { font-size: 26px; font-weight: 800; letter-spacing: -1px; }
+
+        /* 🎴 Top 4 Small Grid (Widget Style) */
+        .top-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 15px; }
+        .small-tile { aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; position: relative; border: 1px solid var(--glass); }
+        .small-tile img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 🫂 Dynamic Jam Panel */
+        .jam-dashboard { 
+            background: var(--glass); backdrop-filter: blur(20px); border-radius: 20px;
+            margin: 10px 15px; padding: 15px; border: 1px solid rgba(255,255,255,0.1);
         }
+        .jam-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .user-list { display: flex; gap: -10px; overflow-x: auto; padding: 5px 0; }
+        .user-avatar { width: 35px; height: 35px; border-radius: 50%; border: 2px solid #000; background: var(--purple-glow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: -10px; transition: 0.3s; }
 
-        /* Moving Icons Animation */
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-5px); }
-            100% { transform: translateY(0px); }
+        /* 🔘 Massive Circular Buttons */
+        .btn-round { 
+            width: 65px; height: 65px; border-radius: 50%; border: none; 
+            background: var(--glass); color: white; display: flex; 
+            align-items: center; justify-content: center; transition: 0.2s;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.3);
         }
-        .moving-icon { animation: float 3s ease-in-out infinite; }
-        
-        .view { display: none; height: calc(100dvh - 170px); overflow-y: auto; padding: 20px 15px; }
-        .view.active { display: block; animation: slideUp 0.4s ease; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .btn-round:active { transform: scale(0.9); background: var(--accent); }
 
-        /* Custom Header */
-        header { padding: 45px 20px 10px; display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 30px; font-weight: 900; letter-spacing: -1.5px; }
-        .logo span { color: var(--green); text-shadow: 0 0 10px var(--green); }
+        .view { display: none; height: calc(100dvh - 180px); overflow-y: auto; padding: 10px 15px; scrollbar-width: none; }
+        .view::-webkit-scrollbar { display: none; }
+        .view.active { display: block; animation: iPhoneSlide 0.5s cubic-bezier(0.1, 0.9, 0.2, 1); }
+        @keyframes iPhoneSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-        /* Custom Jam Section */
-        .jam-bar { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 15px; margin: 10px 15px; display: flex; gap: 12px; border: 1px solid rgba(255,255,255,0.1); }
-        .jam-btn { flex: 1; padding: 14px; border-radius: 10px; border: none; font-weight: 800; font-size: 14px; transition: 0.3s; }
-        .btn-create { background: var(--green); color: #000; box-shadow: 0 4px 15px rgba(29,185,84,0.3); }
-        .btn-join { background: #333; color: #fff; }
-
-        /* Grid & Cards */
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .card { background: #121212; border-radius: 12px; overflow: hidden; border: 1px solid #222; }
-        .card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
-        .card-body { padding: 12px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* Mini Player */
-        #mini-player {
-            position: fixed; bottom: 95px; left: 10px; right: 10px; height: 65px;
-            background: rgba(40, 40, 40, 0.95); backdrop-filter: blur(10px);
-            border-radius: 12px; display: none; align-items: center; padding: 0 15px; z-index: 1000;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        #mini-player img { width: 48px; height: 48px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-
-        /* Full Player Overlay */
-        #player-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; 
-            background: linear-gradient(to bottom, #4a148c, #000); 
-            z-index: 2000; transform: translateY(100%); transition: 0.6s cubic-bezier(0.19, 1, 0.22, 1);
-            padding: 50px 25px; display: flex; flex-direction: column;
+        /* 🎵 Player Overlay (iPhone Design) */
+        #player-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
+            background: linear-gradient(180deg, #1a1a2e 0%, #000 100%);
+            z-index: 3000; transform: translateY(100%); transition: 0.6s cubic-bezier(0.3, 0, 0, 1);
+            padding: 60px 30px; display: flex; flex-direction: column; align-items: center;
         }
         #player-overlay.active { transform: translateY(0); }
-        .main-art { width: 100%; aspect-ratio: 1/1; border-radius: 15px; margin: 40px 0; box-shadow: 0 25px 60px rgba(0,0,0,0.8); animation: pulseArt 4s infinite alternate; }
-        
-        @keyframes pulseArt { from { transform: scale(1); } to { transform: scale(1.03); } }
+        .player-art-box { width: 100%; max-width: 320px; aspect-ratio: 1/1; border-radius: 30px; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,0.7); margin-bottom: 40px; }
+        .player-art-box img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Bottom Nav */
-        .nav { position: fixed; bottom: 0; width: 100%; height: 85px; background: rgba(0,0,0,0.98); display: flex; justify-content: space-around; align-items: center; z-index: 1500; border-top: 1px solid #111; }
-        .nav-item { text-align: center; color: var(--text-dim); font-size: 12px; font-weight: 600; transition: 0.3s; }
-        .nav-item.active { color: #fff; transform: scale(1.1); }
-        .nav-item svg { width: 30px; height: 30px; display: block; margin: 0 auto 5px; transition: 0.3s; }
+        /* 🎚️ Main Play Button (Huge) */
+        .play-mega { width: 90px; height: 90px; background: white; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; }
+        .play-mega svg { fill: black; width: 45px; height: 45px; }
 
-        /* Play Button */
-        .play-main { width: 75px; height: 75px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; border: none; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+        /* 🧭 Tab Bar */
+        .tab-bar { 
+            position: fixed; bottom: 0; width: 100%; height: 95px; 
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(25px);
+            display: flex; justify-content: space-around; align-items: center; 
+            padding-bottom: 20px; border-top: 1px solid rgba(255,255,255,0.05); z-index: 2000;
+        }
+        .tab-item { text-align: center; color: #888; font-weight: 600; font-size: 11px; flex: 1; }
+        .tab-item.active { color: white; }
+        .tab-item svg { width: 32px; height: 32px; display: block; margin: 0 auto 5px; }
 
-        #yt-hidden { position: fixed; left: -9999px; }
+        /* 💨 Mini Player (Glass Card) */
+        #mini-player {
+            position: fixed; bottom: 105px; left: 15px; right: 15px; height: 70px;
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(15px);
+            border-radius: 18px; display: none; align-items: center; padding: 0 15px;
+            z-index: 1500; border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        #yt-engine { position: fixed; left: -9999px; }
     </style>
 </head>
 <body>
 
-<div id="yt-hidden"><div id="player"></div></div>
-<div id="bg-overlay"></div>
+<div id="yt-engine"><div id="player"></div></div>
+<div id="bg-canvas"></div>
 
 <header>
-    <div class="logo moving-icon">Pixel<span>.</span></div>
-    <div style="background: rgba(255,255,255,0.1); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-        <svg fill="white" width="24" height="24" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    <div class="logo-box float">
+        <div class="logo-circle"><svg width="24" height="24" fill="black" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>
+        <div class="logo-text">Pixel<span>.</span></div>
     </div>
+    <div class="user-avatar" style="margin:0; border:2px solid var(--accent);">U</div>
 </header>
 
-<div class="jam-bar" id="jam-controls">
-    <button class="jam-btn btn-create moving-icon" onclick="customCreateJam()">Create My Jam</button>
-    <button class="jam-btn btn-join" onclick="customJoinJam()">Join a Room</button>
+<div class="top-grid" id="top-tiles">
+    </div>
+
+<div class="jam-dashboard">
+    <div class="jam-header">
+        <span id="jam-status" style="font-weight: 800; font-size: 13px; color: #888;">OFFLINE JAM</span>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn-round" style="width: 40px; height: 40px;" onclick="initJam()">➕</button>
+            <button class="btn-round" style="width: 40px; height: 40px;" onclick="joinJam()">👤</button>
+        </div>
+    </div>
+    <div class="user-list" id="jam-users">
+        </div>
 </div>
 
 <div id="home-view" class="view active">
-    <h2 style="font-size: 26px;">Recommended</h2>
-    <div class="grid" id="home-grid"></div>
-    <h3 style="margin-top:30px">Trending Now</h3>
-    <div id="home-list"></div>
+    <h2 style="font-size: 28px; font-weight: 800; margin: 20px 0;">New Vibes</h2>
+    <div id="home-content"></div>
 </div>
 
 <div id="search-view" class="view">
-    <div style="background: #fff; border-radius: 10px; display: flex; align-items: center; padding: 15px; margin-bottom: 25px;">
-        <input id="q" placeholder="Search Artists or Songs" style="border:none; outline:none; width:100%; font-size:18px; color:#000; font-weight:600;" onkeyup="if(event.key==='Enter') doSearch()">
+    <div style="background: rgba(255,255,255,0.1); border-radius: 20px; padding: 18px; margin-top: 20px;">
+        <input id="sq" placeholder="Search tracks, artists..." style="background:transparent; border:none; color:white; width:100%; font-size:18px; font-weight:600;" onkeyup="if(event.key==='Enter') search()">
     </div>
-    <div id="search-results"></div>
+    <div id="results" style="margin-top: 20px;"></div>
 </div>
 
-<div id="mini-player" onclick="toggleFull(true)">
-    <img id="m-img" src="">
+<div id="mini-player" onclick="toggleOverlay(true)">
+    <img id="m-img" src="" style="width:50px; height:50px; border-radius:12px;">
     <div style="flex:1; margin:0 15px; overflow:hidden;">
-        <h5 id="m-title" style="margin:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Song Name</h5>
+        <h4 id="m-title" style="margin:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Song Name</h4>
     </div>
-    <button style="background:none; border:none; color:white;" onclick="togglePlay(event)">
-        <svg id="m-play" viewBox="0 0 24 24" width="35" height="35" fill="white"><path d="M8 5v14l11-7z"/></svg>
+    <button class="play-mega" style="width:45px; height:45px;" onclick="togglePlay(event)">
+        <svg id="m-play" viewBox="0 0 24 24" width="24"><path d="M8 5v14l11-7z"/></svg>
     </button>
 </div>
 
-<div class="nav">
-    <div class="nav-item active" onclick="tab('home', this)">
-        <svg class="moving-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home
-    </div>
-    <div class="nav-item" onclick="tab('search', this)">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Search
-    </div>
-</div>
-
 <div id="player-overlay">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <svg onclick="toggleFull(false)" width="35" height="35" fill="white" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
-        <div id="jam-tag" style="font-size: 11px; font-weight: 800; background: rgba(29,185,84,0.2); color: var(--green); padding: 6px 12px; border-radius: 20px;">PIXEL PREMIUM</div>
-        <div width="35"></div>
+    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+        <button class="btn-round" style="width:50px; height:50px;" onclick="toggleOverlay(false)">▼</button>
+        <div style="text-align:center;">
+            <p style="font-size:10px; font-weight:800; color:var(--accent); letter-spacing:2px; margin:0;">PLAYING FROM JAM</p>
+            <b id="active-room" style="font-size:14px;">GLOBAL MIX</b>
+        </div>
+        <button class="btn-round" style="width:50px; height:50px;">...</button>
     </div>
 
-    <img id="f-img" class="main-art">
-
-    <div>
-        <h2 id="f-title" style="margin:0; font-size:26px;">Song Title</h2>
-        <p id="f-artist" style="color:var(--text-dim); margin:10px 0; font-size:18px;">Artist</p>
+    <div class="player-art-box float" style="margin-top:50px;">
+        <img id="f-img" src="">
     </div>
 
-    <div style="margin-top:40px;">
-        <input type="range" id="seek" value="0" style="width:100%; accent-color:#fff;" onchange="seekTo(this.value)">
-        <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px; font-weight:bold; color:var(--text-dim);">
+    <div style="width:100%; text-align:left;">
+        <h2 id="f-title" style="font-size:28px; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Song Title</h2>
+        <p id="f-artist" style="color:#aaa; font-size:18px; margin:10px 0;">Artist Name</p>
+    </div>
+
+    <div style="width:100%; margin-top:30px;">
+        <input type="range" id="seek" value="0" style="width:100%; accent-color:white;" onchange="seek(this.value)">
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:12px; color:#888;">
             <span id="cur">0:00</span>
             <span id="dur">0:00</span>
         </div>
     </div>
 
-    <div style="display: flex; justify-content: space-around; align-items: center; margin-top: 50px;">
-        <svg width="40" height="40" fill="white" onclick="skip(-10)" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-        <button class="play-main" onclick="togglePlay(event)">
-            <svg id="f-play" width="40" height="40" fill="black" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <div style="display:flex; justify-content:space-around; align-items:center; width:100%; margin-top:50px;">
+        <button class="btn-round" onclick="skip(-10)"><svg viewBox="0 0 24 24" width="30" fill="white"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+        <button class="play-mega" onclick="togglePlay(event)">
+            <svg id="f-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </button>
-        <svg width="40" height="40" fill="white" onclick="skip(10)" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        <button class="btn-round" onclick="skip(10)"><svg viewBox="0 0 24 24" width="30" fill="white"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+    </div>
+</div>
+
+<div class="tab-bar">
+    <div class="tab-item active" onclick="tab('home', this)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> Home
+    </div>
+    <div class="tab-item" onclick="tab('search', this)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Search
     </div>
 </div>
 
 <script>
-    let yt, apiKey, currentId, jamRoom = null;
+    let yt, apiKey, currentId, jamRoom = null, myName = "User";
     const socket = io();
 
     function onYouTubeIframeAPIReady() {
-        yt = new YT.Player('player', { 
-            height: '0', width: '0', 
-            playerVars: { 'autoplay': 1, 'controls': 0 },
-            events: { 'onStateChange': stateChange, 'onReady': () => console.log("Engine Ready") } 
-        });
+        yt = new YT.Player('player', { height: '0', width: '0', events: { 'onStateChange': stateChange } });
     }
 
     async function init() {
@@ -191,32 +213,35 @@
     }
 
     async function loadHome() {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=Bollywood%20Songs%202025&type=video&maxResults=10&key=${apiKey}`);
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=2025%20Trending%20Songs&type=video&maxResults=15&key=${apiKey}`);
         const data = await res.json();
         
-        document.getElementById("home-grid").innerHTML = data.items.slice(0, 4).map(v => `
-            <div class="card" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
+        // Load Top 4 Small Tiles
+        document.getElementById("top-tiles").innerHTML = data.items.slice(0, 4).map(v => `
+            <div class="small-tile" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
                 <img src="${v.snippet.thumbnails.medium.url}">
-                <div class="card-body">${v.snippet.title}</div>
             </div>`).join('');
-        
-        renderList(data.items.slice(4), "home-list");
-    }
 
-    async function doSearch() {
-        const query = document.getElementById("q").value;
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&maxResults=15&key=${apiKey}`);
-        const data = await res.json();
-        renderList(data.items, "search-results");
-    }
-
-    function renderList(items, target) {
-        document.getElementById(target).innerHTML = items.map(v => `
-            <div style="display:flex; align-items:center; padding:12px 0; border-bottom:1px solid #111;" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
-                <img src="${v.snippet.thumbnails.medium.url}" style="width:55px; height:55px; border-radius:8px; margin-right:15px;">
+        // Load Main Feed
+        document.getElementById("home-content").innerHTML = data.items.slice(4).map(v => `
+            <div style="display:flex; align-items:center; margin-bottom:20px; background:var(--glass); padding:12px; border-radius:18px;" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
+                <img src="${v.snippet.thumbnails.medium.url}" style="width:65px; height:65px; border-radius:15px; margin-right:15px;">
                 <div style="flex:1; overflow:hidden;">
                     <h4 style="margin:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.snippet.title}</h4>
-                    <p style="margin:4px 0 0; color:#b3b3b3; font-size:12px;">${v.snippet.channelTitle}</p>
+                    <p style="margin:5px 0 0; color:#888; font-size:12px;">${v.snippet.channelTitle}</p>
+                </div>
+            </div>`).join('');
+    }
+
+    async function search() {
+        const q = document.getElementById("sq").value;
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=15&key=${apiKey}`);
+        const data = await res.json();
+        document.getElementById("results").innerHTML = data.items.map(v => `
+            <div style="display:flex; align-items:center; margin-bottom:15px;" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
+                <img src="${v.snippet.thumbnails.medium.url}" style="width:55px; height:55px; border-radius:12px; margin-right:15px;">
+                <div style="flex:1; overflow:hidden;">
+                    <h4 style="margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.snippet.title}</h4>
                 </div>
             </div>`).join('');
     }
@@ -229,75 +254,71 @@
         document.getElementById("m-title").innerText = title; document.getElementById("f-title").innerText = title;
         document.getElementById("f-artist").innerText = artist;
         
-        if(!isSync && jamRoom) socket.emit("sync-play", { room: jamRoom, id, title, img, artist });
-        toggleFull(true);
+        if(!isSync && jamRoom) socket.emit("sync-play", { room: jamRoom, id, title, img, artist, sender: myName });
+        toggleOverlay(true);
+        if(window.navigator.vibrate) window.navigator.vibrate(60); // iPhone haptic feel
     }
 
     function stateChange(e) {
         const p1 = document.getElementById("f-play");
         const p2 = document.getElementById("m-play");
-        const pausePath = "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
-        const playPath = "M8 5v14l11-7z";
+        const pause = `<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>`;
+        const playBtn = `<path d="M8 5v14l11-7z"/>`;
 
         if(e.data === 1) {
-            p1.innerHTML = `<path d="${pausePath}"/>`; p2.innerHTML = `<path d="${pausePath}"/>`;
+            p1.innerHTML = pause; p2.innerHTML = pause;
             updateSeek();
         } else {
-            p1.innerHTML = `<path d="${playPath}"/>`; p2.innerHTML = `<path d="${playPath}"/>`;
+            p1.innerHTML = playBtn; p2.innerHTML = playBtn;
         }
-
-        // AUTO-PLAY NEXT SONG Logic
-        if(e.data === 0) {
-            console.log("Song Ended. Finding next...");
-            playNext();
-        }
+        if(e.data === 0) playNext();
     }
 
     async function playNext() {
         const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&relatedToVideoId=${currentId}&type=video&maxResults=1&key=${apiKey}`);
         const data = await res.json();
-        if(data.items && data.items.length > 0) {
+        if(data.items.length > 0) {
             const v = data.items[0];
             play(v.id.videoId, v.snippet.title, v.snippet.thumbnails.high.url, v.snippet.channelTitle);
-        } else {
-            // Fallback: search trending if no related found
-            loadHome();
         }
     }
 
-    // CUSTOM JAM MODE
-    function customCreateJam() {
-        const myName = prompt("Enter your Name (Jam Creator):", "User");
-        const myId = prompt("Enter a unique Jam ID (e.g. MyParty123):", "PIXEL_" + Math.floor(Math.random()*999));
-        
-        if(myId) {
-            jamRoom = myId.toUpperCase();
+    // 🫂 ADVANCED JAM LOGIC
+    function initJam() {
+        myName = prompt("Enter Your Name:", "User");
+        jamRoom = prompt("Create Room ID (e.g. PARTY77):", "PIXEL" + Math.floor(Math.random()*99));
+        if(jamRoom) {
             socket.emit("join", jamRoom);
-            document.getElementById("jam-tag").innerText = "JAM ROOM: " + jamRoom;
-            document.getElementById("jam-tag").style.background = "#1DB954";
-            document.getElementById("jam-tag").style.color = "#000";
-            alert(`Jam Room '${jamRoom}' created by ${myName}! Share this ID to sync.`);
+            document.getElementById("jam-status").innerText = "LIVE JAM: " + jamRoom;
+            document.getElementById("jam-status").style.color = "var(--accent)";
+            addUserToUI(myName);
         }
     }
 
-    function customJoinJam() {
-        const id = prompt("Enter the Room ID to Join:");
+    function joinJam() {
+        const id = prompt("Enter Room ID to Join:");
         if(id) {
             jamRoom = id.toUpperCase();
             socket.emit("join", jamRoom);
-            document.getElementById("jam-tag").innerText = "CONNECTED TO: " + jamRoom;
-            document.getElementById("jam-tag").style.background = "#1DB954";
-            document.getElementById("jam-tag").style.color = "#000";
-            alert("Successfully joined Jam: " + jamRoom);
+            document.getElementById("jam-status").innerText = "JOINED: " + jamRoom;
+            document.getElementById("jam-status").style.color = "var(--accent)";
         }
+    }
+
+    function addUserToUI(name) {
+        const list = document.getElementById("jam-users");
+        const div = document.createElement("div");
+        div.className = "user-avatar float";
+        div.innerText = name[0].toUpperCase();
+        list.appendChild(div);
     }
 
     function updateSeek() {
         const bar = document.getElementById("seek");
         bar.max = yt.getDuration();
         document.getElementById("dur").innerText = formatTime(yt.getDuration());
-        const timer = setInterval(() => {
-            if(yt.getPlayerState() !== 1) { clearInterval(timer); return; }
+        const t = setInterval(() => {
+            if(yt.getPlayerState() !== 1) { clearInterval(t); return; }
             bar.value = yt.getCurrentTime();
             document.getElementById("cur").innerText = formatTime(yt.getCurrentTime());
         }, 1000);
@@ -305,19 +326,20 @@
 
     function formatTime(s) { let m = Math.floor(s/60); let sec = Math.floor(s%60); return `${m}:${sec < 10 ? '0'+sec : sec}`; }
     function togglePlay(e) { e.stopPropagation(); if(yt.getPlayerState() === 1) yt.pauseVideo(); else yt.playVideo(); }
-    function tab(t, el) {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        document.getElementById(t + '-view').classList.add('active');
-        el.classList.add('active');
-        document.querySelector("header").style.display = (t === 'search') ? 'none' : 'flex';
-        document.getElementById("jam-controls").style.display = (t === 'home') ? 'flex' : 'none';
+    function toggleOverlay(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    function tab(v, el) {
+        document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.tab-item').forEach(x => x.classList.remove('active'));
+        document.getElementById(v + '-view').classList.add('active'); el.classList.add('active');
     }
-    function toggleFull(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
-    function seekTo(v) { yt.seekTo(v, true); }
+    function seek(v) { yt.seekTo(v, true); }
     function skip(s) { yt.seekTo(yt.getCurrentTime() + s, true); }
 
-    socket.on("play", d => play(d.id, d.title, d.img, d.artist, true));
+    socket.on("play", d => {
+        play(d.id, d.title, d.img, d.artist, true);
+        addUserToUI(d.sender || "Friend");
+    });
+    
     init();
 </script>
 </body>
