@@ -1,165 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pixel Music</title>
-<script src="https://www.youtube.com/iframe_api"></script>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Music</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        :root { --primary: #1DB954; --bg: #121212; --card: #181818; }
+        body { margin:0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #fff; padding-bottom: 120px; }
+        .header { padding: 20px; text-align: center; color: var(--primary); font-size: 28px; font-weight: bold; border-bottom: 1px solid #333; }
+        
+        #loginPanel { max-width: 300px; margin: 50px auto; text-align: center; background: var(--card); padding: 30px; border-radius: 10px; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; background: #333; color: white; }
+        button { background: var(--primary); color: black; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; margin: 5px; }
 
-<style>
-body{margin:0;font-family:Arial;background:#121212;color:#fff;}
-.header{text-align:center;padding:20px;font-size:24px;font-weight:bold;}
-#loginPanel,#app{display:none;}
-input,button{padding:8px;margin:5px;border-radius:5px;border:none;}
-button{cursor:pointer;background:#1DB954;color:#000;font-weight:bold;}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px;overflow-y:auto;max-height:50vh;}
-.card{background:#181818;border-radius:10px;overflow:hidden;cursor:pointer;}
-.card img{width:100%;}
-.card p{margin:5px;font-size:14px;}
-.player{position:fixed;bottom:0;width:100%;background:#181818;padding:10px;display:flex;flex-direction:column;}
-.controls{display:flex;justify-content:space-around;align-items:center;}
-.controls button{font-size:22px;}
-</style>
+        .container { padding: 15px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .card { background: var(--card); border-radius: 8px; padding: 10px; cursor: pointer; transition: 0.3s; }
+        .card:hover { background: #282828; }
+        .card img { width: 100%; border-radius: 5px; }
+        .card p { font-size: 14px; margin: 10px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Fix for Black Screen: Player Area */
+        #video-container { width: 100%; max-width: 600px; margin: 10px auto; border-radius: 10px; overflow: hidden; background: #000; aspect-ratio: 16/9; }
+        
+        .player-bar { position: fixed; bottom: 0; width: 100%; background: #181818; border-top: 1px solid #333; padding: 15px 0; z-index: 100; }
+        .controls { display: flex; justify-content: center; align-items: center; gap: 20px; }
+        #seek { width: 80%; display: block; margin: 10px auto; accent-color: var(--primary); }
+    </style>
 </head>
-
 <body>
-<div class="header">Pixel Music</div>
 
-<div id="loginPanel" style="text-align:center;">
-<h3>Login / Register</h3>
-<input id="username" placeholder="Username"><br>
-<input id="password" type="password" placeholder="Password"><br>
-<button onclick="register()">Register</button>
-<button onclick="login()">Login</button>
-<div id="loginMsg"></div>
-</div>
+<div class="header">PIXEL MUSIC</div>
 
-<div id="app">
-<div id="current-song" style="text-align:center;margin-bottom:5px;">No song playing</div>
-<div class="grid" id="grid">
-<p id="loading">Loading songs...</p>
-</div>
-<div>
-<h4>Playlists</h4>
-<input id="plName" placeholder="New Playlist"><button onclick="createPlaylist()">Add</button>
-<div id="playlists"></div>
-</div>
-<div class="player">
-<input type="range" id="seek" value="0" style="width:100%">
-<div class="controls">
-<button onclick="seek(-10)">⏮</button>
-<button id="playBtn" onclick="playPause()">▶</button>
-<button onclick="seek(10)">⏭</button>
-<button onclick="joinJam()">🎵</button>
-</div>
-</div>
+<div id="loginPanel">
+    <h2>Welcome</h2>
+    <input id="username" placeholder="Username">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="auth('register')">Register</button>
+    <button onclick="auth('login')">Login</button>
+    <p id="msg"></p>
 </div>
 
-<div id="yt" style="display:none"></div>
+<div id="app" style="display:none;">
+    <div id="video-container">
+        <div id="yt-player"></div>
+    </div>
+
+    <div class="container">
+        <h3 id="now-playing">Select a song</h3>
+        <div class="grid" id="song-grid"></div>
+        
+        <hr style="border:0.5px solid #333; margin: 20px 0;">
+        <h3>My Playlists</h3>
+        <input id="plName" placeholder="Playlist Name" style="width:200px">
+        <button onclick="createPlaylist()">Create</button>
+        <div id="playlists-list"></div>
+    </div>
+
+    <div class="player-bar">
+        <input type="range" id="seek" value="0" min="0" step="1" onchange="manualSeek(this.value)">
+        <div class="controls">
+            <button onclick="yt.seekTo(yt.getCurrentTime()-10)">-10s</button>
+            <button id="playBtn" onclick="togglePlay()" style="font-size: 20px;">▶</button>
+            <button onclick="yt.seekTo(yt.getCurrentTime()+10)">+10s</button>
+            <button onclick="joinJam()" title="Sync with Room">👥 Jam</button>
+        </div>
+    </div>
+</div>
 
 <script>
-let yt, playing=false, videoId="", room="pixel", user=null;
-const socket=io();
+    let yt, user, currentVideoId = "", room = "global";
+    const socket = io();
 
-// YouTube Player
-function onYouTubeIframeAPIReady(){yt=new YT.Player("yt",{events:{onReady:init,onStateChange:onPlayerState}});}
-
-// Login/Register
-function register(){
-    fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})})
-    .then(r=>r.json()).then(d=>{if(d.ok){login();}else loginMsg("Username taken")});
-}
-function login(){
-    fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})})
-    .then(r=>r.json()).then(d=>{
-        if(d.ok){user=d;document.getElementById("loginPanel").style.display="none";document.getElementById("app").style.display="block";loadPlaylists();init();}
-        else loginMsg("Invalid credentials");
-    });
-}
-function loginMsg(msg){document.getElementById("loginMsg").innerText=msg;}
-
-// YouTube + Fetch Songs
-async function init(){
-    const r=await fetch("/api/config"); const d=await r.json();
-    const res=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=bollywood&type=video&maxResults=8&key=${d.yt}`);
-    const data=await res.json();
-    if(data.items && data.items.length>0){
-        renderSongs(data.items);
-        document.getElementById("loading").style.display="none";
-    } else document.getElementById("loading").innerText="No songs found";
-}
-
-function renderSongs(list){
-    const g=document.getElementById("grid");
-    g.innerHTML="";
-    list.forEach(v=>{
-        g.innerHTML+=`<div class="card" onclick="play('${v.id.videoId}','${v.snippet.title}')">
-        <img src="${v.snippet.thumbnails.high.url}"><p>${v.snippet.title}</p></div>`;
-    });
-}
-
-// Play Song
-function play(id,title){
-    videoId=id;
-    yt.loadVideoById(id);
-    document.getElementById("current-song").innerText=title;
-    playing=true;
-    document.getElementById("playBtn").innerText="⏸";
-    socket.emit("play",{roomId:room,videoId:id,time:0,playing:true});
-}
-
-// Play/Pause
-function playPause(){
-    if(!videoId) return;
-    if(playing){ yt.pauseVideo(); document.getElementById("playBtn").innerText="▶"; socket.emit("pause",room);}
-    else{ yt.playVideo(); document.getElementById("playBtn").innerText="⏸"; socket.emit("play",{roomId:room,videoId,time:yt.getCurrentTime(),playing:true});}
-    playing=!playing;
-}
-
-// Seek
-function seek(t){if(!videoId) return; yt.seekTo(yt.getCurrentTime()+t,true); socket.emit("seek",{roomId:room,time:yt.getCurrentTime()});}
-
-// Player State
-function onPlayerState(e){
-    if(e.data==YT.PlayerState.PLAYING){
-        const seekInput=document.getElementById("seek");
-        seekInput.max=yt.getDuration();
-        setInterval(()=>{seekInput.value=yt.getCurrentTime();},1000);
+    function onYouTubeIframeAPIReady() {
+        yt = new YT.Player('yt-player', {
+            height: '100%', width: '100%',
+            playerVars: { 'autoplay': 0, 'controls': 0 },
+            events: { 'onStateChange': onStateChange }
+        });
     }
-}
 
-// Jam Mode
-function joinJam(){socket.emit("join",room); alert("Joined Jam Room!");}
-socket.on("play",d=>{yt.loadVideoById(d.videoId,d.time); document.getElementById("playBtn").innerText="⏸"; playing=true;});
-socket.on("pause",()=>{yt.pauseVideo(); document.getElementById("playBtn").innerText="▶"; playing=false;});
-socket.on("seek",t=>{yt.seekTo(t,true);});
+    async function auth(type) {
+        const u = document.getElementById("username").value;
+        const p = document.getElementById("password").value;
+        const res = await fetch(`/api/${type}`, {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({username:u, password:p})
+        });
+        const data = await res.json();
+        if(data.ok) {
+            if(type === 'login') {
+                user = data.username;
+                document.getElementById("loginPanel").style.display = "none";
+                document.getElementById("app").style.display = "block";
+                loadSongs();
+                loadPlaylists();
+            } else { alert("Registered! Now Login."); }
+        } else alert(data.error);
+    }
 
-// Playlists
-async function createPlaylist(){
-    const name=document.getElementById("plName").value;
-    if(!name) return;
-    await fetch("/api/playlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:user.username,name})});
-    loadPlaylists();
-}
-async function loadPlaylists(){
-    const res=await fetch("/api/playlists/"+user.username);
-    const pls=await res.json();
-    const container=document.getElementById("playlists");
-    container.innerHTML="";
-    pls.forEach(p=>{
-        let html=`<div style="margin:5px;padding:5px;background:#242424;border-radius:5px;">
-        <b>${p.name}</b> <button onclick="addToPlaylist('${p._id}')">Add current</button>
-        <div>${p.songs.map(s=>"<p>"+s+"</p>").join("")}</div></div>`;
-        container.innerHTML+=html;
-    });
-}
-async function addToPlaylist(id){
-    if(!videoId) return alert("No song playing");
-    await fetch("/api/playlist/add",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,videoId})});
-    loadPlaylists();
-}
+    async function loadSongs() {
+        const cfg = await (await fetch("/api/config")).json();
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=trending%20songs&type=video&maxResults=12&key=${cfg.yt}`);
+        const data = await res.json();
+        const grid = document.getElementById("song-grid");
+        grid.innerHTML = data.items.map(v => `
+            <div class="card" onclick="playVideo('${v.id.videoId}', '${v.snippet.title.replace(/'/g, "")}')">
+                <img src="${v.snippet.thumbnails.medium.url}">
+                <p>${v.snippet.title}</p>
+            </div>
+        `).join('');
+    }
+
+    function playVideo(id, title) {
+        currentVideoId = id;
+        yt.loadVideoById(id);
+        document.getElementById("now-playing").innerText = title;
+        document.getElementById("playBtn").innerText = "⏸";
+        socket.emit("play", {roomId: room, videoId: id, time: 0, playing: true});
+    }
+
+    function togglePlay() {
+        const state = yt.getPlayerState();
+        if(state === 1) { yt.pauseVideo(); document.getElementById("playBtn").innerText = "▶"; }
+        else { yt.playVideo(); document.getElementById("playBtn").innerText = "⏸"; }
+    }
+
+    function manualSeek(val) { yt.seekTo(val, true); }
+
+    function onStateChange(e) {
+        if(e.data === 1) { // Playing
+            const seek = document.getElementById("seek");
+            seek.max = yt.getDuration();
+            setInterval(() => { seek.value = yt.getCurrentTime(); }, 1000);
+        }
+    }
+
+    function joinJam() { socket.emit("join", room); alert("Joined Jam Room!"); }
+    socket.on("play", d => { yt.loadVideoById(d.videoId, d.time); });
+
+    async function createPlaylist() {
+        const name = document.getElementById("plName").value;
+        await fetch("/api/playlist", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({username: user, name})
+        });
+        loadPlaylists();
+    }
+
+    async function loadPlaylists() {
+        const res = await fetch("/api/playlists/" + user);
+        const data = await res.json();
+        document.getElementById("playlists-list").innerHTML = data.map(p => `
+            <div style="background:#222; padding:10px; margin:5px; border-radius:5px;">
+                <strong>${p.name}</strong> (${p.songs.length} songs)
+            </div>
+        `).join('');
+    }
 </script>
 </body>
 </html>
