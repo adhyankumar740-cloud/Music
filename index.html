@@ -3,184 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Music Pro</title>
+    <title>Pixel Music - Spotify Edition</title>
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        :root { --spotify-green: #1DB954; --bg-black: #121212; --card-grey: #181818; --text-grey: #b3b3b3; }
-        body { margin: 0; font-family: 'Helvetica Neue', Arial; background: var(--bg-black); color: white; overflow-x: hidden; }
+        :root { --spotify-green: #1DB954; --bg-black: #000000; --surface: #121212; --card-hover: #282828; --text-muted: #b3b3b3; }
         
-        /* Auth Screen */
-        #auth-screen { padding: 40px 20px; text-align: center; }
-        .logo-text { color: var(--spotify-green); font-size: 32px; font-weight: bold; margin-bottom: 30px; }
-        input { width: 100%; background: #282828; border: none; padding: 15px; border-radius: 5px; color: white; margin-bottom: 10px; box-sizing: border-box; }
-        .btn-primary { width: 100%; background: var(--spotify-green); color: black; border: none; padding: 15px; border-radius: 30px; font-weight: bold; cursor: pointer; }
+        body { margin: 0; font-family: 'Circular Std', 'Helvetica Neue', sans-serif; background: var(--bg-black); color: white; -webkit-tap-highlight-color: transparent; }
+        
+        /* Navigation & Header */
+        .nav-header { padding: 20px 15px; font-size: 24px; font-weight: bold; background: linear-gradient(to bottom, #222, var(--bg-black)); position: sticky; top: 0; z-index: 50; }
+        
+        /* Search Styling */
+        .search-box { padding: 10px 15px; }
+        .search-bar { background: #fff; border-radius: 4px; display: flex; align-items: center; padding: 12px 15px; color: #000; font-weight: 500; }
+        .search-bar input { border: none; outline: none; width: 100%; margin-left: 10px; font-size: 16px; }
 
-        /* Main App */
-        #app-screen { display: none; padding: 20px; }
-        .search-container { position: sticky; top: 0; background: var(--bg-black); z-index: 10; padding-bottom: 15px; }
-        .search-bar { background: white; color: black; border-radius: 20px; padding: 10px 20px; display: flex; align-items: center; }
-        .search-bar input { background: transparent; color: black; margin: 0; padding: 0 10px; }
+        /* Song List View (Spotify style results) */
+        .section-label { padding: 20px 15px 10px; font-size: 18px; font-weight: bold; }
+        .song-list-item { display: flex; align-items: center; padding: 10px 15px; transition: 0.2s; }
+        .song-list-item:active { background: var(--card-hover); }
+        .song-list-item img { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; }
+        .song-meta { margin-left: 12px; flex: 1; overflow: hidden; }
+        .song-meta h4 { margin: 0; font-size: 16px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-meta p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
 
-        .section-title { font-size: 22px; margin: 20px 0; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .song-card { background: var(--card-grey); border-radius: 8px; padding: 12px; transition: 0.3s; }
-        .song-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 4px; }
-        .song-card p { margin: 8px 0 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* Full Screen Spotify Player */
+        /* Full Player Overlay (Spotify Mobile Layout) */
         #player-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: linear-gradient(to bottom, #535353, #121212); 
-            z-index: 100; transform: translateY(100%); transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex; flex-direction: column; align-items: center; padding: 40px 20px; box-sizing: border-box;
+            background: linear-gradient(to bottom, #333, #000); 
+            z-index: 1000; transform: translateY(100%); transition: 0.4s ease-out;
+            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column;
         }
         #player-overlay.active { transform: translateY(0); }
-        .close-player { position: absolute; top: 20px; left: 20px; font-size: 24px; }
-        .album-art-large { width: 300px; height: 300px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin: 40px 0; }
-        .player-info { text-align: left; width: 100%; }
-        .player-info h2 { margin: 0; font-size: 24px; }
-        .player-info p { color: var(--text-grey); margin: 5px 0; }
-
-        /* Player Controls */
-        .progress-container { width: 100%; margin: 30px 0; }
-        #seek-slider { width: 100%; accent-color: white; }
-        .main-controls { display: flex; align-items: center; gap: 30px; }
-        .play-pause-btn { background: white; color: black; width: 60px; height: 60px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; border: none; }
-
-        /* Mini Player (Bottom) */
-        #mini-player {
-            position: fixed; bottom: 0; left: 0; width: 100%; height: 65px;
-            background: #282828; display: none; align-items: center; padding: 0 15px; box-sizing: border-box; border-bottom: 2px solid var(--bg-black);
-        }
-        #mini-player img { width: 45px; height: 45px; border-radius: 4px; margin-right: 12px; }
-        .mini-info { flex-grow: 1; }
-        .mini-info p { margin: 0; font-size: 14px; font-weight: bold; }
+        .player-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
         
-        /* Hidden YT Player */
-        #yt-hidden { position: fixed; top: -1000px; left: -1000px; pointer-events: none; }
+        .artwork-wrapper { width: 100%; aspect-ratio: 1/1; padding: 10px; box-sizing: border-box; margin-bottom: 40px; }
+        .artwork-wrapper img { width: 100%; height: 100%; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        
+        .now-playing-info h2 { margin: 0; font-size: 24px; }
+        .now-playing-info p { margin: 8px 0; color: var(--text-muted); font-size: 16px; }
+
+        /* Controls */
+        .progress-area { margin-top: 30px; }
+        #seek-bar { width: 100%; accent-color: #fff; height: 4px; }
+        .time-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+        .player-controls { display: flex; justify-content: space-around; align-items: center; margin-top: 30px; }
+        .play-btn { width: 64px; height: 64px; border-radius: 50%; background: #fff; color: #000; display: flex; align-items: center; justify-content: center; font-size: 24px; border: none; }
+        .side-btn { background: none; border: none; color: #fff; font-size: 28px; }
+
+        /* Mini Player Bottom Bar */
+        #mini-player {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 64px;
+            background: #222; display: none; align-items: center; padding: 0 10px;
+            box-sizing: border-box; border-bottom: 1px solid #000; z-index: 500;
+        }
+        #mini-player img { width: 40px; height: 40px; border-radius: 4px; }
+        .mini-content { flex: 1; margin: 0 12px; overflow: hidden; }
+        .mini-content h5 { margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mini-content p { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+
+        /* Hidden YT */
+        #yt-api { position: absolute; top: -100px; opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="yt-hidden">
-    <div id="player"></div>
-</div>
+<div id="yt-api"><div id="player"></div></div>
 
-<div id="auth-screen">
-    <div class="logo-text">Pixel Music</div>
-    <input id="user-in" placeholder="Username">
-    <input id="pass-in" type="password" placeholder="Password">
-    <button class="btn-primary" onclick="handleAuth('login')">Log In</button>
-    <p style="color: var(--text-grey); margin: 15px 0;" onclick="handleAuth('register')">Don't have an account? Sign Up</p>
-</div>
-
-<div id="app-screen">
-    <div class="search-container">
+<div id="main-view">
+    <div class="nav-header">Good morning</div>
+    
+    <div class="search-box">
         <div class="search-bar">
-            🔍 <input id="search-in" placeholder="Search songs, artists..." onkeyup="if(event.key==='Enter') search()">
+            <span>🔍</span>
+            <input id="search-input" placeholder="What do you want to listen to?" onkeyup="if(event.key==='Enter') searchSongs()">
         </div>
     </div>
-    
-    <div class="section-title">Explore Trending</div>
-    <div class="grid" id="song-list"></div>
-    
-    <div style="margin: 30px 0; text-align: center;">
-        <button class="btn-primary" style="width: auto; padding: 10px 30px;" onclick="startJam()">Start Jam Mode 👥</button>
+
+    <div class="section-label" id="results-label">Trending now</div>
+    <div id="song-list">
+        </div>
+
+    <div style="padding: 20px; text-align: center;">
+        <button onclick="startJam()" style="background:none; border: 1px solid #555; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px;">Start Jam Room 👥</button>
     </div>
 </div>
 
-<div id="mini-player" onclick="toggleOverlay(true)">
-    <img id="mini-img" src="">
-    <div class="mini-info">
-        <p id="mini-title">Song Title</p>
-        <small id="mini-artist" style="color: var(--text-grey);">Artist</small>
+<div id="mini-player" onclick="openFullPlayer()">
+    <img id="m-img" src="">
+    <div class="mini-content">
+        <h5 id="m-title">Song Title</h5>
+        <p id="m-artist">Artist Name</p>
     </div>
-    <button id="mini-play" class="play-pause-btn" style="width:40px; height:40px; font-size:16px;">▶</button>
+    <button class="side-btn" onclick="togglePlay(event)" id="m-play-btn" style="font-size: 20px; margin-right: 10px;">▶</button>
 </div>
 
 <div id="player-overlay">
-    <div class="close-player" onclick="toggleOverlay(false)">⌄</div>
-    <img id="full-img" class="album-art-large" src="">
-    <div class="player-info">
-        <h2 id="full-title">Song Title</h2>
-        <p id="full-artist">YouTube Artist</p>
+    <div class="player-nav">
+        <span onclick="closeFullPlayer()" style="font-size: 30px;">⌄</span>
+        <span style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Playing from Search</span>
+        <span>...</span>
     </div>
-    
-    <div class="progress-container">
-        <input type="range" id="seek-slider" value="0" step="1" onchange="manualSeek(this.value)">
-        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px; color: var(--text-grey);">
-            <span id="curr-time">0:00</span>
-            <span id="total-time">0:00</span>
+
+    <div class="artwork-wrapper">
+        <img id="f-img" src="">
+    </div>
+
+    <div class="now-playing-info">
+        <h2 id="f-title">Song Title</h2>
+        <p id="f-artist">Artist Name</p>
+    </div>
+
+    <div class="progress-area">
+        <input type="range" id="seek-bar" value="0" step="1" onchange="seekTo(this.value)">
+        <div class="time-labels">
+            <span id="time-curr">0:00</span>
+            <span id="time-total">0:00</span>
         </div>
     </div>
 
-    <div class="main-controls">
-        <button onclick="skip(-10)" style="background:none; border:none; color:white; font-size:24px;">⏪</button>
-        <button id="full-play" class="play-pause-btn" onclick="togglePlay(event)">▶</button>
-        <button onclick="skip(10)" style="background:none; border:none; color:white; font-size:24px;">⏩</button>
+    <div class="player-controls">
+        <button class="side-btn" onclick="skip(-10)">⏮</button>
+        <button class="play-btn" onclick="togglePlay(event)" id="f-play-btn">▶</button>
+        <button class="side-btn" onclick="skip(10)">⏭</button>
+    </div>
+    
+    <div style="margin-top: 40px; text-align: center; color: var(--spotify-green); font-size: 14px; font-weight: bold;">
+        <span id="jam-status"></span>
     </div>
 </div>
 
 <script>
-    let ytPlayer, user, currentVideoId, apiKey, jamRoom = null;
+    let ytPlayer, currentId, apiKey, jamRoom = null;
     const socket = io();
 
     function onYouTubeIframeAPIReady() {
         ytPlayer = new YT.Player('player', {
-            height: '200', width: '200',
-            playerVars: { 'autoplay': 0, 'controls': 0, 'showinfo': 0, 'rel': 0 },
-            events: { 'onStateChange': onStateChange, 'onReady': () => console.log("Player Ready") }
+            height: '0', width: '0',
+            events: { 'onStateChange': onStateChange }
         });
     }
 
-    async function handleAuth(type) {
-        const username = document.getElementById("user-in").value;
-        const password = document.getElementById("pass-in").value;
-        const res = await fetch(`/api/${type}`, {
-            method: "POST", headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({username, password})
-        });
+    async function init() {
+        const res = await fetch("/api/config");
         const data = await res.json();
-        if(data.ok) {
-            user = data.username;
-            document.getElementById("auth-screen").style.display = "none";
-            document.getElementById("app-screen").style.display = "block";
-            initApp();
-        } else alert("Error: " + (data.error || "Check credentials"));
+        apiKey = data.yt;
+        searchSongs("Arijit Singh Mix"); // Default landing songs
     }
 
-    async function initApp() {
-        const config = await (await fetch("/api/config")).json();
-        apiKey = config.yt;
-        search("bollywood lo-fi");
-    }
-
-    async function search(query) {
-        const q = query || document.getElementById("search-in").value;
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=10&key=${apiKey}`);
+    async function searchSongs(query) {
+        const q = query || document.getElementById("search-input").value;
+        if(!q) return;
+        
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=15&key=${apiKey}`);
         const data = await res.json();
-        const list = document.getElementById("song-list");
-        list.innerHTML = data.items.map(v => `
-            <div class="song-card" onclick="playSong('${v.id.videoId}', '${v.snippet.title.replace(/'/g,"")}', '${v.snippet.thumbnails.high.url}', '${v.snippet.channelTitle}')">
+        
+        const listContainer = document.getElementById("song-list");
+        listContainer.innerHTML = data.items.map(v => `
+            <div class="song-list-item" onclick="playMusic('${v.id.videoId}', '${v.snippet.title.replace(/'/g,"")}', '${v.snippet.thumbnails.high.url}', '${v.snippet.channelTitle}')">
                 <img src="${v.snippet.thumbnails.medium.url}">
-                <p>${v.snippet.title}</p>
+                <div class="song-meta">
+                    <h4>${v.snippet.title}</h4>
+                    <p>${v.snippet.channelTitle}</p>
+                </div>
+                <span style="color: #b3b3b3;">...</span>
             </div>
         `).join('');
     }
 
-    function playSong(id, title, img, artist, isSync = false) {
-        currentVideoId = id;
+    function playMusic(id, title, img, artist, isSync = false) {
+        currentId = id;
         ytPlayer.loadVideoById(id);
         
-        // Update UI
+        // Update All UI elements
         document.getElementById("mini-player").style.display = "flex";
-        document.getElementById("mini-title").innerText = title;
-        document.getElementById("mini-img").src = img;
-        document.getElementById("full-title").innerText = title;
-        document.getElementById("full-img").src = img;
-        document.getElementById("full-artist").innerText = artist;
-        document.getElementById("mini-artist").innerText = artist;
+        document.getElementById("m-title").innerText = title;
+        document.getElementById("f-title").innerText = title;
+        document.getElementById("m-img").src = img;
+        document.getElementById("f-img").src = img;
+        document.getElementById("m-artist").innerText = artist;
+        document.getElementById("f-artist").innerText = artist;
 
         if(!isSync && jamRoom) {
             socket.emit("sync-play", { room: jamRoom, id, title, img, artist });
@@ -190,68 +194,66 @@
     function togglePlay(e) {
         e.stopPropagation();
         const state = ytPlayer.getPlayerState();
-        if(state === 1) { 
-            ytPlayer.pauseVideo(); 
-            updatePlayUI(false); 
-        } else { 
-            ytPlayer.playVideo(); 
-            updatePlayUI(true); 
-        }
-    }
-
-    function updatePlayUI(playing) {
-        const icon = playing ? "⏸" : "▶";
-        document.getElementById("mini-play").innerText = icon;
-        document.getElementById("full-play").innerText = icon;
+        if(state === 1) { ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
     }
 
     function onStateChange(e) {
-        if(e.data === YT.PlayerState.PLAYING) {
-            updatePlayUI(true);
-            const slider = document.getElementById("seek-slider");
-            slider.max = Math.floor(ytPlayer.getDuration());
-            document.getElementById("total-time").innerText = formatTime(ytPlayer.getDuration());
-            
-            setInterval(() => {
-                const curr = ytPlayer.getCurrentTime();
-                slider.value = curr;
-                document.getElementById("curr-time").innerText = formatTime(curr);
-            }, 1000);
+        const fBtn = document.getElementById("f-play-btn");
+        const mBtn = document.getElementById("m-play-btn");
+        
+        if(e.data === 1) { // Playing
+            fBtn.innerText = "⏸"; mBtn.innerText = "⏸";
+            updateProgress();
+        } else {
+            fBtn.innerText = "▶"; mBtn.innerText = "▶";
         }
-        if(e.data === YT.PlayerState.ENDED) {
-            playNextAutomatically();
-        }
+        
+        if(e.data === 0) playNextRelated(); // Autoplay next
     }
 
-    async function playNextAutomatically() {
-        // Same type of song fetch
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&relatedToVideoId=${currentVideoId}&type=video&maxResults=1&key=${apiKey}`);
+    function updateProgress() {
+        const bar = document.getElementById("seek-bar");
+        bar.max = Math.floor(ytPlayer.getDuration());
+        document.getElementById("time-total").innerText = formatTime(ytPlayer.getDuration());
+        
+        setInterval(() => {
+            const curr = ytPlayer.getCurrentTime();
+            bar.value = curr;
+            document.getElementById("time-curr").innerText = formatTime(curr);
+        }, 1000);
+    }
+
+    async function playNextRelated() {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&relatedToVideoId=${currentId}&type=video&maxResults=1&key=${apiKey}`);
         const data = await res.json();
         if(data.items.length > 0) {
             const v = data.items[0];
-            playSong(v.id.videoId, v.snippet.title, v.snippet.thumbnails.high.url, v.snippet.channelTitle);
+            playMusic(v.id.videoId, v.snippet.title, v.snippet.thumbnails.high.url, v.snippet.channelTitle);
         }
     }
 
-    function manualSeek(val) { ytPlayer.seekTo(val, true); }
-    function skip(sec) { ytPlayer.seekTo(ytPlayer.getCurrentTime() + sec, true); }
-    function toggleOverlay(show) { document.getElementById("player-overlay").classList.toggle("active", show); }
-    
     function formatTime(s) {
         let min = Math.floor(s / 60);
         let sec = Math.floor(s % 60);
         return `${min}:${sec < 10 ? '0'+sec : sec}`;
     }
 
+    function openFullPlayer() { document.getElementById("player-overlay").classList.add("active"); }
+    function closeFullPlayer() { document.getElementById("player-overlay").classList.remove("active"); }
+    function seekTo(val) { ytPlayer.seekTo(val, true); }
+    function skip(s) { ytPlayer.seekTo(ytPlayer.getCurrentTime() + s, true); }
+
     function startJam() {
-        jamRoom = prompt("Enter a Room Name for Jam:");
+        jamRoom = prompt("Jam Room Name:");
         if(jamRoom) {
             socket.emit("join", jamRoom);
-            alert("Jam Mode Active in Room: " + jamRoom);
+            document.getElementById("jam-status").innerText = "CONNECTED TO JAM: " + jamRoom;
         }
     }
 
-    socket.on("play", d => playSong(d.id, d.title, d.img, d.artist, true));
+    socket.on("play", d => playMusic(d.id, d.title, d.img, d.artist, true));
+    
+    init();
 </script>
 </body>
 </html>
