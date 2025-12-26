@@ -34,7 +34,7 @@ app.post("/api/google-login", async (req, res) => {
 });
 
 // --- ELITE JAM ENGINE ---
-const roomAdmins = new Map();
+const roomAdmins = new Map(); // Jam kisne banaya hai track karne ke liye
 
 function sendUserList(room) {
     const clients = io.sockets.adapter.rooms.get(room);
@@ -49,18 +49,48 @@ function sendUserList(room) {
 }
 
 io.on("connection", (socket) => {
+    
+    // 1. Room Validation Check
+    socket.on("check-room", (room, callback) => {
+        const exists = io.sockets.adapter.rooms.has(room);
+        callback(exists);
+    });
+
     socket.on("join", ({ room, username }) => {
         socket.join(room);
         socket.room = room;
         socket.username = username;
-        if (!roomAdmins.has(room)) roomAdmins.set(room, socket.id);
+        
+        // Pehla banda admin banega (End Jam control ke liye)
+        if (!roomAdmins.has(room)) {
+            roomAdmins.set(room, socket.id);
+        }
         
         sendUserList(room);
         io.to(room).emit("notification", `${username} joined the jam!`);
     });
 
+    // 2. Play/Change Song Sync
     socket.on("sync-play", (data) => {
-        if (socket.room) socket.to(socket.room).emit("play-client", data);
+        if (socket.room) {
+            socket.to(socket.room).emit("play-client", data);
+        }
+    });
+
+    // 3. Pause/Play/Seek Sync (Universal - Sabke liye)
+    socket.on("sync-control", (data) => {
+        if (socket.room) {
+            // "to(room)" baki sabko bhejega, "emit" khud ko nahi bhejega
+            socket.to(socket.room).emit("control-client", data);
+        }
+    });
+
+    // 4. End Jam Logic (Sirf Admin kar sakega)
+    socket.on("end-jam", (room) => {
+        if (roomAdmins.get(room) === socket.id) {
+            io.to(room).emit("jam-ended");
+            roomAdmins.delete(room);
+        }
     });
 
     socket.on("leave-room", () => {
@@ -75,8 +105,9 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", () => {
         if (socket.room) {
-            sendUserList(socket.room);
-            if (roomAdmins.get(socket.room) === socket.id) roomAdmins.delete(socket.room);
+            const room = socket.room;
+            if (roomAdmins.get(room) === socket.id) roomAdmins.delete(room);
+            sendUserList(room);
         }
     });
 });
