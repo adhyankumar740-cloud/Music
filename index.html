@@ -36,14 +36,12 @@
         
         #mini-player { position: fixed; bottom: 110px; left: 20px; right: 20px; height: 75px; background: rgba(20,20,20,0.9); backdrop-filter: blur(20px); border-radius: 20px; display: none; align-items: center; padding: 0 15px; border: 1px solid var(--border); z-index: 4500; }
 
-        #lyrics-panel { position: fixed; inset: 0; background: #000; z-index: 6000; display: none; flex-direction: column; padding: 40px; overflow-y: auto; text-align: center; }
-
         .slider { width: 100%; height: 5px; background: #333; border-radius: 5px; outline: none; accent-color: var(--ios-pink); margin: 20px 0; }
         .nav-dock { position: fixed; bottom: 25px; left: 20px; right: 20px; height: 80px; background: rgba(255,255,255,0.08); backdrop-filter: blur(40px); border-radius: 40px; display: flex; justify-content: space-around; align-items: center; border: 1px solid var(--border); z-index: 4000; }
         .nav-link { text-align: center; color: #666; cursor: pointer; }
         .nav-link.active { color: #fff; }
 
-        #toast { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: var(--ios-pink); padding: 12px 30px; border-radius: 50px; z-index: 10000; display: none; font-weight: bold; }
+        #toast { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: #ff2d55; padding: 12px 30px; border-radius: 50px; z-index: 10000; display: none; font-weight: bold; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
@@ -53,7 +51,7 @@
 <div id="auth-screen">
     <h1 style="font-size: 50px; margin-bottom: 10px;">Pixel<span style="color:var(--ios-pink)">.</span></h1>
     <p style="opacity: 0.6; margin-bottom: 40px;">Elite Music Jam</p>
-    <div id="g_id_onload" data-client_id="128393071320-2ibf05qb92kerfb133ffaq3gn4aoqbpb.apps.googleusercontent.com" data-callback="handleAuth"></div>
+    <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID" data-callback="handleAuth"></div>
     <div class="g_id_signin" data-type="standard"></div>
 </div>
 
@@ -71,7 +69,7 @@
     <div id="jam-info-box">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <b id="active-room-id">ROOM: --</b>
-            <button class="btn-mega" style="height:30px; padding:0 15px; background:white; color:black;" onclick="leaveJam()">EXIT</button>
+            <button id="exit-btn" class="btn-mega" style="height:30px; padding:0 15px; background:white; color:black;" onclick="leaveJam()">LEAVE</button>
         </div>
         <div id="jam-users"></div>
     </div>
@@ -103,8 +101,6 @@
     <h2 id="f-title" style="text-align:center; font-size: 22px;">Song Title</h2>
     <p id="f-artist" style="opacity: 0.5; margin: 5px 0 20px;">Artist Name</p>
 
-    <button class="btn-mega" style="padding: 10px 25px; margin-bottom: 20px;" onclick="showLyrics()">SHOW LYRICS 🎤</button>
-
     <input type="range" id="seek-slider" class="slider" value="0" onchange="seekSong(this.value)">
 
     <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-top:20px;">
@@ -112,12 +108,6 @@
         <button class="btn-mega" style="width:90px; height:90px; font-size:35px; border-radius:50%; background:#fff; color:#000;" onclick="togglePlay()"><span id="p-icon">▶</span></button>
         <button class="btn-mega" style="width:70px; height:70px; font-size: 24px;" onclick="playNext()">⏭</button>
     </div>
-</div>
-
-<div id="lyrics-panel">
-    <button class="btn-mega" style="width:50px; height:50px; align-self:flex-end;" onclick="document.getElementById('lyrics-panel').style.display='none'">X</button>
-    <h2 id="l-title" style="color:var(--ios-pink)"></h2>
-    <div id="l-content" style="margin-top:30px;"></div>
 </div>
 
 <nav class="nav-dock" id="bottom-nav" style="display:none;">
@@ -128,7 +118,7 @@
 <div id="yt-engine" style="position:fixed; left:-9999px;"><div id="player"></div></div>
 
 <script>
-    let yt, apiKey, currentUser = null, playlist = [], currentIndex = 0, jamRoom = null;
+    let yt, apiKey, currentUser = null, playlist = [], currentIndex = 0, jamRoom = null, isJamAdmin = false;
     const socket = io();
 
     function onYouTubeIframeAPIReady() {
@@ -136,9 +126,9 @@
             'onStateChange': e => {
                 document.getElementById("p-icon").innerText = (e.data === 1) ? "II" : "▶";
                 if(e.data === 0) playNext();
-            },
-            'onReady': () => setInterval(updateProgress, 1000)
+            }
         }});
+        setInterval(updateProgress, 1000);
     }
 
     async function init() {
@@ -162,12 +152,12 @@
         document.getElementById("main-header").style.display = "flex";
         document.getElementById("bottom-nav").style.display = "flex";
         document.getElementById("home-view").classList.add("active");
-        document.getElementById("user-avatar").innerHTML = `<img src="${currentUser.picture}" style="width:40px; border-radius:50%; border:2px solid var(--ios-pink);">`;
+        document.getElementById("user-avatar").innerHTML = `<img src="${currentUser.picture}" style="width:40px; border-radius:50%;">`;
         loadFeed();
     }
 
     async function loadFeed() {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=TrendingMusic2025&type=video&maxResults=10&key=${apiKey}`);
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=BollywoodHits2025&type=video&maxResults=10&key=${apiKey}`);
         const data = await res.json(); playlist = data.items; renderList(playlist, "home-feed");
     }
 
@@ -192,70 +182,84 @@
         currentIndex = index;
         const s = playlist[index];
         const id = s.id?.videoId || s.id;
-        const title = s.snippet?.title || s.title;
-        const img = s.snippet?.thumbnails?.high?.url || s.img;
-        const art = s.snippet?.channelTitle || s.artist;
-
         yt.loadVideoById(id);
-        document.getElementById("f-img").src = document.getElementById("m-img").src = img;
-        document.getElementById("f-title").innerText = document.getElementById("m-title").innerText = title;
-        document.getElementById("f-artist").innerText = art;
         
+        document.getElementById("f-img").src = document.getElementById("m-img").src = s.snippet?.thumbnails?.high?.url || s.img;
+        document.getElementById("f-title").innerText = document.getElementById("m-title").innerText = s.snippet?.title || s.title;
         document.getElementById("mini-player").style.display = "flex";
-        if(!isSync) togglePlayer(true);
-        if(!isSync && jamRoom) socket.emit("sync-play", { room: jamRoom, id, title, img, artist: art, index });
+
+        if(!isSync && jamRoom) {
+            socket.emit("sync-play", { room: jamRoom, id, title: s.snippet.title, img: s.snippet.thumbnails.high.url, artist: s.snippet.channelTitle });
+        }
     }
 
-    // --- SYNC IMPROVED LOGIC ---
+    // --- SYNC CONTROLS (EVERYONE HAS ACCESS) ---
     function togglePlay(isSync = false) {
         const state = yt.getPlayerState();
-        if (state === 1) { // Playing -> Pause
-            yt.pauseVideo();
-            if(!isSync && jamRoom) socket.emit("sync-control", { room: jamRoom, action: "pause" });
-        } else { // Paused -> Play
-            yt.playVideo();
-            if(!isSync && jamRoom) socket.emit("sync-control", { room: jamRoom, action: "play" });
+        const action = (state === 1) ? "pause" : "play";
+        
+        if (action === "pause") yt.pauseVideo(); else yt.playVideo();
+
+        if(!isSync && jamRoom) {
+            socket.emit("sync-control", { room: jamRoom, action, time: yt.getCurrentTime() });
         }
     }
 
     function seekSong(v, isSync = false) {
-        const targetTime = yt.getDuration() * (v/100);
-        yt.seekTo(targetTime, true);
-        if(!isSync && jamRoom) socket.emit("sync-control", { room: jamRoom, action: "seek", time: v });
+        const target = yt.getDuration() * (v/100);
+        yt.seekTo(target, true);
+        if(!isSync && jamRoom) {
+            socket.emit("sync-control", { room: jamRoom, action: "seek", time: target, slider: v });
+        }
     }
 
-    socket.on("control-client", (data) => {
-        if (data.action === "pause") {
-            yt.pauseVideo();
-            showToast("Paused by Peer ⏸");
-        } else if (data.action === "play") {
-            yt.playVideo();
-            showToast("Playing... ⏯");
-        } else if (data.action === "seek") {
-            seekSong(data.time, true); 
-        }
-    });
-
-    // --- ELITE JAM LOGIC ---
+    // --- JAM LOGIC (WITH VALIDATION) ---
     function createJam() {
         const code = "PXL-" + Math.floor(1000 + Math.random() * 9000);
+        isJamAdmin = true;
+        document.getElementById("exit-btn").innerText = "END JAM";
         joinProcess(code);
     }
+
     function joinJam() {
         const code = prompt("Enter Jam Code:");
-        if(code) joinProcess(code.toUpperCase());
+        if(code) {
+            socket.emit("check-room", code.toUpperCase(), (exists) => {
+                if(exists) {
+                    isJamAdmin = false;
+                    document.getElementById("exit-btn").innerText = "LEAVE";
+                    joinProcess(code.toUpperCase());
+                } else {
+                    showToast("❌ Jam ID Wrong!");
+                }
+            });
+        }
     }
+
     function joinProcess(code) {
         jamRoom = code;
-        socket.emit("join", { room: code, username: currentUser.username });
+        socket.emit("join", { room: code, username: currentUser.name });
         document.getElementById("jam-info-box").style.display = "block";
         document.getElementById("jam-init").style.display = "none";
         document.getElementById("active-room-id").innerText = "ROOM: " + code;
     }
-    function leaveJam() { location.reload(); }
 
-    socket.on("room-users", (users) => {
-        document.getElementById("jam-users").innerHTML = users.map(u => `<span class="u-tag">● ${u}</span>`).join('');
+    function leaveJam() {
+        if(isJamAdmin) {
+            if(confirm("End this Jam for everyone?")) {
+                socket.emit("end-jam", jamRoom);
+                location.reload();
+            }
+        } else {
+            location.reload();
+        }
+    }
+
+    // --- SOCKET LISTENERS ---
+    socket.on("control-client", d => {
+        if(d.action === "play") { yt.playVideo(); yt.seekTo(d.time, true); }
+        if(d.action === "pause") yt.pauseVideo();
+        if(d.action === "seek") { yt.seekTo(d.time, true); document.getElementById("seek-slider").value = d.slider; }
     });
 
     socket.on("play-client", d => {
@@ -263,21 +267,14 @@
         playSong(0, true);
     });
 
-    async function showLyrics() {
-        const title = document.getElementById("f-title").innerText.split('(')[0].trim();
-        const panel = document.getElementById("lyrics-panel");
-        const content = document.getElementById("l-content");
-        panel.style.display = "flex";
-        document.getElementById("l-title").innerText = title;
-        content.innerText = "Searching lyrics...";
-        try {
-            const res = await fetch(`https://api.lyrics.ovh/v1/suggest/${title}`);
-            const d = await res.json();
-            const lRes = await fetch(`https://api.lyrics.ovh/v1/${d.data[0].artist.name}/${d.data[0].title}`);
-            const ld = await lRes.json();
-            content.innerHTML = ld.lyrics ? ld.lyrics.replace(/\n/g, '<br>') : "Lyrics not found.";
-        } catch { content.innerText = "Error loading lyrics."; }
-    }
+    socket.on("jam-ended", () => {
+        alert("The host ended the Jam.");
+        location.reload();
+    });
+
+    socket.on("room-users", users => {
+        document.getElementById("jam-users").innerHTML = users.map(u => `<span class="u-tag">● ${u}</span>`).join('');
+    });
 
     function updateProgress() {
         if(yt && yt.getDuration && yt.getPlayerState() === 1) {
@@ -285,16 +282,15 @@
         }
     }
 
-    function playNext() { if(currentIndex < playlist.length - 1) playSong(currentIndex + 1); }
-    function playPrev() { if(currentIndex > 0) playSong(currentIndex - 1); }
-    function togglePlayer(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.style.display="block"; setTimeout(()=>t.style.display="none",3000); }
     function switchTab(t, el) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
         document.getElementById(t+'-view').classList.add('active'); el.classList.add('active');
     }
-    function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.style.display="block"; setTimeout(()=>t.style.display="none",3000); }
-    socket.on("notification", m => showToast(m));
+    function togglePlayer(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    function playNext() { if(currentIndex < playlist.length - 1) playSong(currentIndex + 1); }
+    function playPrev() { if(currentIndex > 0) playSong(currentIndex - 1); }
 
     init();
 </script>
