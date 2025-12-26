@@ -23,7 +23,7 @@
         .view.active { display: block; animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
 
-        .btn-mega { background: var(--glass); backdrop-filter: blur(40px); border: 1px solid var(--border); border-radius: 25px; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; font-weight: bold; font-size: 16px; }
+        .btn-mega { background: var(--glass); backdrop-filter: blur(40px); border: 1px solid var(--border); border-radius: 25px; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; font-weight: bold; font-size: 14px; text-transform: uppercase; }
         .btn-mega:active { transform: scale(0.9); background: #fff; color: #000; }
 
         .song-card { display: flex; align-items: center; background: var(--glass); padding: 15px; border-radius: 25px; margin-bottom: 15px; border: 1px solid var(--border); }
@@ -38,7 +38,7 @@
         .slider { width: 100%; height: 5px; background: #333; border-radius: 5px; outline: none; accent-color: var(--ios-pink); margin: 20px 0; }
 
         .nav-dock { position: fixed; bottom: 25px; left: 20px; right: 20px; height: 80px; background: rgba(255,255,255,0.08); backdrop-filter: blur(40px); border-radius: 40px; display: flex; justify-content: space-around; align-items: center; border: 1px solid var(--border); z-index: 4000; }
-        .nav-link { text-align: center; color: #666; transition: 0.3s; }
+        .nav-link { text-align: center; color: #666; transition: 0.3s; text-decoration: none; cursor: pointer; }
         .nav-link.active { color: #fff; }
 
         #toast { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: var(--ios-pink); padding: 12px 30px; border-radius: 50px; z-index: 10000; display: none; font-weight: bold; box-shadow: 0 10px 30px var(--glow); animation: pop 0.3s ease; }
@@ -48,10 +48,13 @@
 <body>
 
 <div id="toast"></div>
+
 <div id="auth-screen">
     <h1 style="font-size: 50px; margin-bottom: 10px;">Pixel<span style="color:var(--ios-pink)">.</span></h1>
     <p style="opacity: 0.6; margin-bottom: 40px;">Elite Music Jam</p>
-    <div id="g_id_onload" data-callback="handleAuth"></div>
+    <div id="g_id_onload" 
+         data-client_id="128393071320-2ibf05qb92kerfb133ffaq3gn4aoqbpb.apps.googleusercontent.com" 
+         data-callback="handleAuth"></div>
     <div class="g_id_signin" data-type="standard" data-shape="pill" data-theme="filled_black" data-size="large"></div>
 </div>
 
@@ -78,7 +81,7 @@
 </div>
 
 <div id="search-view" class="view">
-    <input id="sq" placeholder="Search Music..." style="width:100%; height:60px; background:var(--glass); border:none; border-radius:20px; padding:0 20px; color:white;" onkeyup="if(event.key==='Enter') startSearch()">
+    <input id="sq" placeholder="Search Music..." style="width:100%; height:60px; background:var(--glass); border:none; border-radius:20px; padding:0 20px; color:white; font-size: 18px; border: 1px solid var(--border);" onkeyup="if(event.key==='Enter') startSearch()">
     <div id="search-results" style="margin-top:20px;"></div>
 </div>
 
@@ -88,46 +91,46 @@
 </div>
 
 <div id="mini-player" onclick="togglePlayer(true)">
-    <img id="m-img" src="" style="width:50px; height:50px; border-radius:10px; margin-right:15px;">
+    <img id="m-img" src="" style="width:50px; height:50px; border-radius:10px; margin-right:15px; object-fit: cover;">
     <div style="flex:1; overflow:hidden;"><b id="m-title" style="white-space:nowrap;">...</b></div>
     <button class="btn-mega" style="width:50px; height:50px; border-radius:50%;" onclick="event.stopPropagation(); togglePlay();">▶</button>
 </div>
 
 <div id="player-overlay">
     <button class="btn-mega" style="width:60px; height:60px; align-self:flex-start;" onclick="togglePlayer(false)">▼</button>
-    <div style="width: 250px; height: 250px; margin: 30px 0; border-radius: 30px; overflow: hidden; box-shadow: 0 20px 50px var(--glow);">
+    <div style="width: 260px; height: 260px; margin: 30px 0; border-radius: 30px; overflow: hidden; box-shadow: 0 20px 50px var(--glow);">
         <img id="f-img" src="" style="width: 100%; height: 100%; object-fit: cover;">
     </div>
-    <h2 id="f-title" style="margin:0; text-align:center; font-size: 24px;">Song Title</h2>
-    <p id="f-artist" style="opacity: 0.5;">Artist Name</p>
+    <h2 id="f-title" style="margin:0; text-align:center; font-size: 22px; padding: 0 10px;">Song Title</h2>
+    <p id="f-artist" style="opacity: 0.5; margin-top: 5px;">Artist Name</p>
 
     <input type="range" id="seek-slider" class="slider" value="0" step="1" onchange="seekSong(this.value)">
-    <div style="width: 100%; display: flex; justify-content: space-between; font-size: 12px; opacity: 0.6;">
+    <div style="width: 100%; display: flex; justify-content: space-between; font-size: 12px; opacity: 0.6; padding: 0 5px;">
         <span id="cur-time">0:00</span>
         <span id="dur-time">0:00</span>
     </div>
 
     <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-top:30px;">
-        <button class="btn-mega" style="width:60px; height:60px;" onclick="skipSec(-10)">-10s</button>
-        <button class="btn-mega" style="width:70px; height:70px;" onclick="playPrev()">⏮</button>
+        <button class="btn-mega" style="width:55px; height:55px; font-size: 12px;" onclick="skipSec(-10)">-10s</button>
+        <button class="btn-mega" style="width:70px; height:70px; font-size: 24px;" onclick="playPrev()">⏮</button>
         <button class="btn-mega" style="width:90px; height:90px; font-size:35px; border-radius:50%; background:#fff; color:#000;" onclick="togglePlay()"><span id="p-icon">▶</span></button>
-        <button class="btn-mega" style="width:70px; height:70px;" onclick="playNext()">⏭</button>
-        <button class="btn-mega" style="width:60px; height:60px;" onclick="skipSec(10)">+10s</button>
+        <button class="btn-mega" style="width:70px; height:70px; font-size: 24px;" onclick="playNext()">⏭</button>
+        <button class="btn-mega" style="width:55px; height:55px; font-size: 12px;" onclick="skipSec(10)">+10s</button>
     </div>
 </div>
 
 <div class="nav-dock" id="bottom-nav" style="display:none;">
     <div class="nav-link active" onclick="switchTab('home', this)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-        <div style="font-size:10px;">Home</div>
+        <div style="font-size:10px; font-weight: bold;">HOME</div>
     </div>
     <div class="nav-link" onclick="switchTab('search', this)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <div style="font-size:10px;">Search</div>
+        <div style="font-size:10px; font-weight: bold;">SEARCH</div>
     </div>
     <div class="nav-link" onclick="switchTab('library', this)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-        <div style="font-size:10px;">Library</div>
+        <div style="font-size:10px; font-weight: bold;">LIBRARY</div>
     </div>
 </div>
 
@@ -148,12 +151,25 @@
     }
 
     async function init() {
-        const res = await fetch("/api/config");
-        const data = await res.json();
-        apiKey = data.yt;
-        google.accounts.id.initialize({ client_id: data.gId, callback: handleAuth });
-        const savedUser = localStorage.getItem('pixelUser');
-        if(savedUser) { currentUser = JSON.parse(savedUser); showApp(); }
+        try {
+            const res = await fetch("/api/config");
+            const data = await res.json();
+            apiKey = data.yt;
+            
+            // ERROR 400 FIX: Agar data.gId null hai toh apni ID yahan manually dalo
+            const finalClientID = data.gId || "128393071320-2ibf05qb92kerfb133ffaq3gn4aoqbpb.apps.googleusercontent.com";
+
+            google.accounts.id.initialize({ 
+                client_id: finalClientID, 
+                callback: handleAuth 
+            });
+            
+            const savedUser = localStorage.getItem('pixelUser');
+            if(savedUser) { 
+                currentUser = JSON.parse(savedUser); 
+                showApp(); 
+            }
+        } catch(e) { console.error("Config load error", e); }
     }
 
     async function handleAuth(response) {
@@ -170,7 +186,6 @@
         document.getElementById("home-view").classList.add("active");
         document.getElementById("user-avatar").innerHTML = `<img src="${currentUser.picture}" style="width:40px; border-radius:50%; border:2px solid var(--ios-pink);">`;
         loadFeed();
-        loadLibrary();
     }
 
     async function loadFeed() {
@@ -202,7 +217,9 @@
     function playSong(index, isSync = false) {
         currentIndex = index;
         const s = playlist[index];
-        const id = s.id.videoId || s.id;
+        if(!s) return;
+
+        const id = s.id?.videoId || s.id;
         const title = s.snippet?.title || s.title;
         const img = s.snippet?.thumbnails?.high?.url || s.img;
         const artist = s.snippet?.channelTitle || s.artist;
@@ -217,13 +234,11 @@
         document.getElementById("mini-player").style.display = "flex";
         if(!isSync) togglePlayer(true);
 
-        // Jam Sync
         if(!isSync && jamRoom) {
             socket.emit("sync-play", { room: jamRoom, id, title, img, artist, index });
         }
     }
 
-    // --- JAM FUNCTIONS ---
     function createJam() {
         const id = prompt("Create Room ID (e.g. PARTY):");
         if(id) {
@@ -250,20 +265,18 @@
         setTimeout(() => t.style.display = "none", 3000);
     }
 
-    // Socket Events
     socket.on("play", d => {
-        // Build a temporary playlist item for sync
-        const syncSong = { id: d.id, title: d.title, img: d.img, artist: d.artist };
+        // Important sync logic
+        const syncSong = { id: d.id, snippet: { title: d.title, thumbnails: { high: { url: d.img } }, channelTitle: d.artist } };
         playlist[d.index] = syncSong; 
         playSong(d.index, true);
-        showToast("Admin changed song! 🎵");
+        showToast("Sync: Song changed by Admin 🎵");
     });
 
     socket.on("notification", msg => showToast(msg));
 
-    // --- PLAYER UTILS ---
     function updateProgress() {
-        if(yt && yt.getDuration) {
+        if(yt && yt.getDuration && yt.getPlayerState() === 1) {
             const cur = yt.getCurrentTime();
             const dur = yt.getDuration();
             const slider = document.getElementById("seek-slider");
