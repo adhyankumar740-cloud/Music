@@ -8,76 +8,117 @@ require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, { 
+    cors: { origin: "*" } 
+});
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log("DB Connected"));
+// --- 1. Database Connection ---
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log("✅ MongoDB Connected: Pixel Music Database Ready"))
+    .catch(err => console.error("❌ DB Connection Error:", err));
 
+// User Model
 const User = mongoose.model("User", new mongoose.Schema({
-    username: { type: String, unique: true },
-    password: { type: String }
+    username: { type: String, unique: true, required: true },
+    password: { type: String, required: true }
 }));
 
-// API Routes
+// --- 2. API Routes ---
+
+// Register
 app.post("/api/register", async (req, res) => {
-    const hash = await bcrypt.hash(req.body.password, 10);
-    try { await new User({ username: req.body.username, password: hash }).save(); res.json({ ok: true }); }
-    catch (e) { res.status(400).json({ error: "Taken" }); }
+    try {
+        const hash = await bcrypt.hash(req.body.password, 10);
+        await new User({ username: req.body.username, password: hash }).save();
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(400).json({ error: "Username already taken" });
+    }
 });
 
+// Login
 app.post("/api/login", async (req, res) => {
     const user = await User.findOne({ username: req.body.username });
-    if (user && await bcrypt.compare(req.body.password, user.password)) res.json({ ok: true, username: user.username });
-    else res.status(401).json({ error: "Invalid" });
+    if (user && await bcrypt.compare(req.body.password, user.password)) {
+        res.json({ ok: true, username: user.username });
+    } else {
+        res.status(401).json({ error: "Invalid credentials" });
+    }
 });
 
-app.get("/api/config", (req, res) => res.json({ yt: process.env.YOUTUBE_API_KEY }));
+// Send API Key to Frontend
+app.get("/api/config", (req, res) => {
+    res.json({ yt: process.env.YOUTUBE_API_KEY });
+});
 
-// --- JAM MODE LOGIC ---
-const roomAdmins = new Map();
+// --- 3. Advanced Socket.io (Jam Mode Engine) ---
+
+const roomAdmins = new Map(); // Room ID -> Socket ID
 
 io.on("connection", (socket) => {
-    // Join Jam Room
+    console.log("New Connection:", socket.id);
+
+    // Join Room Logic
     socket.on("join", ({ room, username }) => {
         socket.join(room);
         socket.room = room;
         socket.username = username;
 
-        // Pehla banda admin hai
+        // Agar room khali hai, toh pehla joiner ADMIN banega
         if (!roomAdmins.has(room)) {
             roomAdmins.set(room, socket.id);
             socket.emit("admin-status", true);
+            console.log(`Admin Set: ${username} for room ${room}`);
+        } else {
+            socket.emit("admin-status", false);
         }
 
-        io.to(room).emit("notification", `${username} joined the jam! 🎵`);
+        // Sabko notify karo
+        io.to(room).emit("notification", `${username} joined the jam! 🔥`);
+        console.log(`${username} joined room: ${room}`);
     });
 
-    // Sync Playback for all
+    // Playback Sync (Change song for everyone)
     socket.on("sync-play", (data) => {
-        io.to(data.room).emit("play", data);
+        if (socket.room) {
+            // Hum io.to(room) use kar rahe hain taaki sender ka player bhi sync ho jaye
+            io.to(data.room).emit("play", data);
+            console.log(`Syncing track in ${data.room}: ${data.title}`);
+        }
     });
 
-    // End Jam (Admin Only)
+    // End Jam (Only Admin can trigger this)
     socket.on("end-jam", (room) => {
         if (roomAdmins.get(room) === socket.id) {
             io.to(room).emit("jam-ended");
             roomAdmins.delete(room);
-            io.in(room).socketsLeave(room);
+            console.log(`Room ${room} closed by admin.`);
         }
     });
 
+    // Disconnect Logic
     socket.on("disconnect", () => {
         if (socket.room) {
             io.to(socket.room).emit("notification", `${socket.username} left the jam.`);
+            
+            // Agar Admin disconnect hota hai, toh room dissolve kar do
             if (roomAdmins.get(socket.room) === socket.id) {
                 roomAdmins.delete(socket.room);
                 io.to(socket.room).emit("jam-ended");
+                console.log(`Admin left, closing room: ${socket.room}`);
             }
         }
+        console.log("Disconnected:", socket.id);
     });
 });
 
-server.listen(5000, () => console.log("Pixel Music Pro on 5000"));
+// --- 4. Server Start ---
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+    console.log(`🚀 Pixel Music Pro Backend running on http://localhost:${PORT}`);
+});
