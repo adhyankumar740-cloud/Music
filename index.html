@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pixel Music - Super App</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        :root { --ios-blue: #007aff; --ios-pink: #ff2d55; --ios-purple: #5856d6; --glass: rgba(255, 255, 255, 0.08); --border: rgba(255, 255, 255, 0.12); }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { margin: 0; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display"; overflow: hidden; height: 100dvh; }
+        
+        .aura-bg { position: fixed; inset: 0; z-index: -2; background: #000; }
+        .aura-circle { position: absolute; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: move 15s infinite alternate; }
+        @keyframes move { from { transform: translate(-10%, -10%); } to { transform: translate(110%, 110%); } }
+
+        .view { display: none; height: calc(100dvh - 120px); overflow-y: auto; padding: 20px 20px 160px; }
+        .view.active { display: block; animation: spring 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes spring { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+
+        .btn-mega { background: var(--glass); backdrop-filter: blur(25px); border: 1px solid var(--border); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .btn-mega:active { transform: scale(0.85); background: #fff; color: #000; }
+
+        #toast { position: fixed; top: 30px; left: 50%; transform: translateX(-50%); background: var(--ios-pink); padding: 12px 25px; border-radius: 50px; font-weight: bold; z-index: 10000; display: none; box-shadow: 0 10px 30px rgba(255,45,85,0.4); }
+
+        .jam-card { background: linear-gradient(135deg, var(--ios-purple), #2a0845); border-radius: 28px; padding: 20px; margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.2); }
+        
+        #player-overlay { position: fixed; inset: 0; background: #000; z-index: 5000; transform: translateY(100%); transition: 0.6s cubic-bezier(0.19, 1, 0.22, 1); display: flex; flex-direction: column; align-items: center; padding: 60px 30px; }
+        #player-overlay.active { transform: translateY(0); }
+
+        .nav-dock { position: fixed; bottom: 30px; left: 25px; right: 25px; height: 85px; background: rgba(20,20,20,0.85); backdrop-filter: blur(30px); border-radius: 40px; display: flex; justify-content: space-around; align-items: center; border: 1px solid var(--border); z-index: 4000; }
+        .nav-link { color: #666; font-size: 11px; text-align: center; font-weight: bold; cursor: pointer; }
+        .nav-link.active { color: #fff; }
+
+        input[type="range"] { -webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.1); height: 6px; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; background: #fff; border-radius: 50%; }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+<div id="yt-engine" style="position:fixed; left:-9999px;"><div id="player"></div></div>
+
+<div class="aura-bg">
+    <div class="aura-circle" style="background:var(--ios-purple); top:10%; left:10%;"></div>
+    <div class="aura-circle" style="background:var(--ios-pink); bottom:10%; right:10%;"></div>
+</div>
+
+<header style="padding: 60px 25px 10px; display: flex; justify-content: space-between;">
+    <div>
+        <h2 style="margin:0; font-size: 32px; font-weight: 900;">Pixel<span style="color:var(--ios-pink)">.</span></h2>
+        <p id="user-greeting" style="font-size:14px; color:#888;">Jam Mode Ready</p>
+    </div>
+</header>
+
+<div id="home-view" class="view active">
+    <div class="jam-card">
+        <h3>Pixel Social Jam</h3>
+        <p style="font-size:13px; opacity:0.8;">Listen together. Change for everyone.</p>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button class="btn-mega" style="flex:1; height:50px; border-radius:15px;" onclick="initJam(true)">Create Jam</button>
+            <button class="btn-mega" style="flex:1; height:50px; border-radius:15px;" onclick="initJam(false)">Join Jam</button>
+        </div>
+    </div>
+    <div id="home-feed"></div>
+</div>
+
+<div id="search-view" class="view">
+    <input id="sq" placeholder="Search music..." style="width:100%; background:var(--glass); border:1px solid var(--border); padding:15px; border-radius:15px; color:#fff;" onkeyup="if(event.key==='Enter') startSearch()">
+    <div id="search-results" style="margin-top:20px;"></div>
+</div>
+
+<div id="player-overlay">
+    <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn-mega" style="width:50px; height:50px;" onclick="togglePlayer(false)">▼</button>
+        <div style="text-align:center;">
+            <p style="font-size:10px; color:var(--ios-pink); letter-spacing:2px; margin:0;">SYNCING LIVE</p>
+            <b id="jam-id-display">SOLO MODE</b>
+        </div>
+        <button id="end-jam-btn" class="btn-mega" style="width:50px; height:50px; display:none; background:red;" onclick="endJam()">✕</button>
+    </div>
+    <img id="f-img" style="width:100%; aspect-ratio:1/1; border-radius:30px; margin:40px 0; object-fit:cover;">
+    <h1 id="f-title" style="margin:0; font-size:24px; text-align:center;">No Track</h1>
+    <p id="f-artist" style="color:#888;">Select a song</p>
+    
+    <div style="width:100%; margin-top:30px;">
+        <input type="range" id="seek" value="0" step="1">
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:10px;">
+            <span id="cur">0:00</span><span id="dur">0:00</span>
+        </div>
+    </div>
+    
+    <div style="display:flex; gap:20px; align-items:center; margin-top:30px;">
+        <button class="btn-mega" style="width:80px; height:80px; background:#fff; color:#000; font-size:30px;" onclick="togglePlay()">▶</button>
+    </div>
+</div>
+
+<div class="nav-dock">
+    <div class="nav-link active" onclick="switchTab('home')">Home</div>
+    <div class="nav-link" onclick="switchTab('search')">Search</div>
+</div>
+
+<script>
+    let yt, apiKey, jamRoom = null, isAdmin = false;
+    const socket = io();
+
+    function onYouTubeIframeAPIReady() {
+        yt = new YT.Player('player', { height: '0', width: '0', events: { 'onStateChange': (e) => {
+            if(e.data === 1) updateSeek();
+        } } });
+    }
+
+    async function init() {
+        const res = await fetch("/api/config");
+        const data = await res.json();
+        apiKey = data.yt;
+        loadHome();
+    }
+
+    async function loadHome() {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=GlobalHits2025&type=video&maxResults=10&key=${apiKey}`);
+        const data = await res.json();
+        renderList(data.items, "home-feed");
+    }
+
+    async function startSearch() {
+        const q = document.getElementById("sq").value;
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=10&key=${apiKey}`);
+        const data = await res.json();
+        renderList(data.items, "search-results");
+    }
+
+    function renderList(items, target) {
+        document.getElementById(target).innerHTML = items.map(v => `
+            <div style="display:flex; align-items:center; margin-bottom:15px; background:var(--glass); padding:10px; border-radius:15px;" onclick="play('${v.id.videoId}','${v.snippet.title.replace(/'/g,"")}','${v.snippet.thumbnails.high.url}','${v.snippet.channelTitle}')">
+                <img src="${v.snippet.thumbnails.default.url}" style="width:50px; border-radius:10px; margin-right:12px;">
+                <div style="flex:1; overflow:hidden;"><h4 style="margin:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.snippet.title}</h4></div>
+            </div>`).join('');
+    }
+
+    function initJam(create) {
+        const user = prompt("Your Username:");
+        const id = prompt(create ? "Create Room ID:" : "Enter Room ID:");
+        if(id && user) {
+            jamRoom = id.toUpperCase();
+            socket.emit("join", { room: jamRoom, username: user });
+            document.getElementById("jam-id-display").innerText = "JAM: " + jamRoom;
+            showToast(`Connected to ${jamRoom}`);
+        }
+    }
+
+    function play(id, title, img, artist, isSync = false) {
+        yt.loadVideoById(id);
+        document.getElementById("f-img").src = img;
+        document.getElementById("f-title").innerText = title;
+        document.getElementById("f-artist").innerText = artist;
+        togglePlayer(true);
+
+        if(!isSync && jamRoom) {
+            socket.emit("sync-play", { room: jamRoom, id, title, img, artist });
+        }
+    }
+
+    function togglePlay() {
+        const state = yt.getPlayerState();
+        state === 1 ? yt.pauseVideo() : yt.playVideo();
+    }
+
+    function endJam() {
+        if(confirm("End jam for everyone?")) socket.emit("end-jam", jamRoom);
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById("toast");
+        t.innerText = msg; t.style.display = "block";
+        setTimeout(() => t.style.display = "none", 3000);
+    }
+
+    function togglePlayer(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    
+    function switchTab(t) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(t+'-view').classList.add('active');
+    }
+
+    function updateSeek() {
+        setInterval(() => {
+            const cur = yt.getCurrentTime();
+            const dur = yt.getDuration();
+            document.getElementById("seek").max = dur;
+            document.getElementById("seek").value = cur;
+            document.getElementById("cur").innerText = fmt(cur);
+            document.getElementById("dur").innerText = fmt(dur);
+        }, 1000);
+    }
+    function fmt(s) { let m=Math.floor(s/60); let sc=Math.floor(s%60); return `${m}:${sc<10?'0'+sc:sc}`; }
+
+    // Socket Listeners
+    socket.on("play", d => play(d.id, d.title, d.img, d.artist, true));
+    socket.on("notification", msg => showToast(msg));
+    socket.on("admin-status", s => { isAdmin = s; document.getElementById("end-jam-btn").style.display = s ? "block" : "none"; });
+    socket.on("jam-ended", () => { alert("Jam session ended."); location.reload(); });
+
+    init();
+</script>
+</body>
+</html>
