@@ -28,8 +28,8 @@
         .song-card { display: flex; align-items: center; background: var(--glass); padding: 15px; border-radius: 25px; margin-bottom: 15px; border: 1px solid var(--border); }
         .song-card img { width: 60px; height: 60px; border-radius: 15px; margin-right: 15px; }
 
-        #jam-info-box { background: var(--ios-pink); padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; }
-        .u-tag { background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 50px; font-size: 11px; margin: 2px; display: inline-block; }
+        #jam-info-box { background: var(--glass); border: 1px solid var(--ios-pink); padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; }
+        .u-tag { background: var(--ios-pink); padding: 4px 12px; border-radius: 50px; font-size: 11px; margin: 3px; display: inline-block; font-weight: bold; }
 
         #player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.98); backdrop-filter: blur(20px); z-index: 5000; transform: translateY(100%); transition: 0.6s cubic-bezier(0.19, 1, 0.22, 1); padding: 40px 30px; display: flex; flex-direction: column; align-items: center; }
         #player-overlay.active { transform: translateY(0); }
@@ -71,7 +71,7 @@
             <b id="active-room-id">ROOM: --</b>
             <button id="exit-btn" class="btn-mega" style="height:30px; padding:0 15px; background:white; color:black;" onclick="leaveJam()">LEAVE</button>
         </div>
-        <div id="jam-users"></div>
+        <div id="jam-users" style="display: flex; flex-wrap: wrap;"></div>
     </div>
 
     <div id="jam-init" style="background: var(--glass); padding: 25px; border-radius: 30px; border: 1px solid var(--border); margin-bottom: 30px;">
@@ -142,9 +142,12 @@
 
     async function handleAuth(response) {
         const res = await fetch("/api/google-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: response.credential }) });
-        currentUser = await res.json();
-        localStorage.setItem('pixelUser', JSON.stringify(currentUser));
-        showApp();
+        const data = await res.json();
+        if(data.ok) {
+            currentUser = data; // Isme 'username' aa raha hai server se
+            localStorage.setItem('pixelUser', JSON.stringify(currentUser));
+            showApp();
+        }
     }
 
     function showApp() {
@@ -193,15 +196,21 @@
         }
     }
 
-    // --- SYNC CONTROLS (EVERYONE HAS ACCESS) ---
+    // --- SYNC CONTROLS WITH LATENCY COMPENSATION ---
     function togglePlay(isSync = false) {
         const state = yt.getPlayerState();
         const action = (state === 1) ? "pause" : "play";
+        const currentTime = yt.getCurrentTime();
         
         if (action === "pause") yt.pauseVideo(); else yt.playVideo();
 
         if(!isSync && jamRoom) {
-            socket.emit("sync-control", { room: jamRoom, action, time: yt.getCurrentTime() });
+            socket.emit("sync-control", { 
+                room: jamRoom, 
+                action, 
+                time: currentTime,
+                timestamp: Date.now() 
+            });
         }
     }
 
@@ -209,11 +218,11 @@
         const target = yt.getDuration() * (v/100);
         yt.seekTo(target, true);
         if(!isSync && jamRoom) {
-            socket.emit("sync-control", { room: jamRoom, action: "seek", time: target, slider: v });
+            socket.emit("sync-control", { room: jamRoom, action: "seek", time: target, slider: v, timestamp: Date.now() });
         }
     }
 
-    // --- JAM LOGIC (WITH VALIDATION) ---
+    // --- JAM LOGIC ---
     function createJam() {
         const code = "PXL-" + Math.floor(1000 + Math.random() * 9000);
         isJamAdmin = true;
@@ -238,10 +247,12 @@
 
     function joinProcess(code) {
         jamRoom = code;
-        socket.emit("join", { room: code, username: currentUser.name });
+        // FIX: 'currentUser.username' bhej rahe hain kyunki server wahi save karta hai
+        socket.emit("join", { room: code, username: currentUser.username });
         document.getElementById("jam-info-box").style.display = "block";
         document.getElementById("jam-init").style.display = "none";
         document.getElementById("active-room-id").innerText = "ROOM: " + code;
+        document.getElementById("room-display").innerText = "IN JAM: " + code;
     }
 
     function leaveJam() {
@@ -257,9 +268,22 @@
 
     // --- SOCKET LISTENERS ---
     socket.on("control-client", d => {
-        if(d.action === "play") { yt.playVideo(); yt.seekTo(d.time, true); }
-        if(d.action === "pause") yt.pauseVideo();
-        if(d.action === "seek") { yt.seekTo(d.time, true); document.getElementById("seek-slider").value = d.slider; }
+        // Latency correction calculation
+        const latency = (Date.now() - (d.serverTime || d.timestamp)) / 1000;
+        const correctedTime = d.time + latency;
+
+        if(d.action === "play") { 
+            yt.seekTo(correctedTime, true);
+            yt.playVideo(); 
+        }
+        if(d.action === "pause") {
+            yt.pauseVideo();
+            yt.seekTo(d.time, true);
+        }
+        if(d.action === "seek") { 
+            yt.seekTo(d.time, true); 
+            document.getElementById("seek-slider").value = d.slider; 
+        }
     });
 
     socket.on("play-client", d => {
@@ -267,13 +291,17 @@
         playSong(0, true);
     });
 
+    socket.on("room-users", users => {
+        console.log("Users in room:", users);
+        const userContainer = document.getElementById("jam-users");
+        if(userContainer) {
+            userContainer.innerHTML = users.map(u => `<span class="u-tag">● ${u}</span>`).join('');
+        }
+    });
+
     socket.on("jam-ended", () => {
         alert("The host ended the Jam.");
         location.reload();
-    });
-
-    socket.on("room-users", users => {
-        document.getElementById("jam-users").innerHTML = users.map(u => `<span class="u-tag">● ${u}</span>`).join('');
     });
 
     function updateProgress() {
