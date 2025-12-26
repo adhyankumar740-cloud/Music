@@ -28,8 +28,8 @@ mongoose.connect(process.env.MONGODB_URI)
 // Models
 const UserSchema = new mongoose.Schema({
     username: { type: String, unique: true, required: true },
-    password: { type: String }, // Normal login ke liye
-    googleId: { type: String }, // Google login ke liye
+    password: { type: String }, 
+    googleId: { type: String }, 
     picture: String
 });
 const User = mongoose.model("User", UserSchema);
@@ -42,24 +42,6 @@ const Library = mongoose.model("Library", LibrarySchema);
 
 // --- 2. API Routes ---
 
-// Register (Normal)
-app.post("/api/register", async (req, res) => {
-    try {
-        const hash = await bcrypt.hash(req.body.password, 10);
-        await new User({ username: req.body.username, password: hash }).save();
-        res.json({ ok: true });
-    } catch (e) { res.status(400).json({ error: "Username taken" }); }
-});
-
-// Login (Normal)
-app.post("/api/login", async (req, res) => {
-    const user = await User.findOne({ username: req.body.username });
-    if (user && await bcrypt.compare(req.body.password, user.password)) {
-        res.json({ ok: true, username: user.username, userId: user._id });
-    } else { res.status(401).json({ error: "Invalid credentials" }); }
-});
-
-// Google Login API
 app.post("/api/google-login", async (req, res) => {
     try {
         const { token } = req.body;
@@ -69,7 +51,6 @@ app.post("/api/google-login", async (req, res) => {
         });
         const payload = ticket.getPayload();
         
-        // Agar user pehli baar aa raha hai toh save karo
         let user = await User.findOne({ googleId: payload.sub });
         if(!user) {
             user = await new User({ 
@@ -78,25 +59,8 @@ app.post("/api/google-login", async (req, res) => {
                 picture: payload.picture 
             }).save();
         }
-        
         res.json({ ok: true, username: payload.name, userId: payload.sub, picture: payload.picture });
     } catch (e) { res.status(400).json({ error: "Google Auth Failed" }); }
-});
-
-// Library Management
-app.post("/api/library/add", async (req, res) => {
-    const { userId, song } = req.body;
-    await Library.findOneAndUpdate(
-        { userId }, 
-        { $addToSet: { songs: song } }, 
-        { upsert: true }
-    );
-    res.json({ ok: true });
-});
-
-app.get("/api/library/:userId", async (req, res) => {
-    const data = await Library.findOne({ userId: req.params.userId });
-    res.json(data ? data.songs : []);
 });
 
 app.get("/api/config", (req, res) => {
@@ -106,43 +70,73 @@ app.get("/api/config", (req, res) => {
     });
 });
 
-// --- 3. Socket.io (Jam Engine) ---
+// --- 3. Socket.io (Elite Jam Engine) ---
 const roomAdmins = new Map();
 
+// Helper function to get all usernames in a room
+function getUsersInRoom(room) {
+    const clients = io.sockets.adapter.rooms.get(room);
+    const users = [];
+    if (clients) {
+        for (const clientId of clients) {
+            const clientSocket = io.sockets.sockets.get(clientId);
+            if (clientSocket.username) users.push(clientSocket.username);
+        }
+    }
+    return users;
+}
+
 io.on("connection", (socket) => {
+    
     socket.on("join", ({ room, username }) => {
         socket.join(room);
         socket.room = room;
         socket.username = username;
 
+        // Admin Assign
         if (!roomAdmins.has(room)) {
             roomAdmins.set(room, socket.id);
             socket.emit("admin-status", true);
         } else {
             socket.emit("admin-status", false);
         }
-        io.to(room).emit("notification", `${username} joined the jam! 🔥`);
+
+        // Send updated user list to everyone in room
+        io.to(room).emit("room-users", getUsersInRoom(room));
+        io.to(room).emit("notification", `${username} joined! 🔥`);
     });
 
     socket.on("sync-play", (data) => {
+        // Only admin should ideally control, but keeping flexible for jam
         if (socket.room) {
-            io.to(data.room).emit("play", data);
+            socket.to(socket.room).emit("play", data);
         }
     });
 
-    socket.on("end-jam", (room) => {
+    socket.on("leave", ({ room, username }) => {
+        socket.leave(room);
+        io.to(room).emit("room-users", getUsersInRoom(room));
+        io.to(room).emit("notification", `${username} left the jam.`);
+        
         if (roomAdmins.get(room) === socket.id) {
-            io.to(room).emit("jam-ended");
             roomAdmins.delete(room);
+            io.to(room).emit("jam-ended");
         }
     });
 
     socket.on("disconnect", () => {
         if (socket.room) {
-            io.to(socket.room).emit("notification", `${socket.username} left.`);
-            if (roomAdmins.get(socket.room) === socket.id) {
-                roomAdmins.delete(socket.room);
-                io.to(socket.room).emit("jam-ended");
+            const room = socket.room;
+            io.to(room).emit("notification", `${socket.username} disconnected.`);
+            
+            // Update list after disconnect
+            setTimeout(() => {
+                io.to(room).emit("room-users", getUsersInRoom(room));
+            }, 1000);
+
+            if (roomAdmins.get(room) === socket.id) {
+                roomAdmins.delete(room);
+                io.to(room).emit("jam-ended");
             }
         }
     });
