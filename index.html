@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pixel Music Elite</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root { --ios-pink: #ff2d55; --glow: rgba(255, 45, 85, 0.5); --glass: rgba(255, 255, 255, 0.1); --border: rgba(255, 255, 255, 0.15); }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: #000; color: #fff; font-family: -apple-system, sans-serif; overflow: hidden; height: 100dvh; }
+
+        /* 🌌 Motion Background */
+        .bg-mesh { position: fixed; inset: 0; z-index: -2; background: #000; overflow: hidden; }
+        .blob { position: absolute; width: 600px; height: 600px; border-radius: 50%; filter: blur(120px); opacity: 0.3; background: var(--ios-pink); animation: orbit 20s infinite alternate; }
+        @keyframes orbit { from { transform: translate(-20%, -20%); } to { transform: translate(100%, 80%); } }
+
+        /* 📱 Views */
+        .view { display: none; height: calc(100dvh - 140px); overflow-y: auto; padding: 20px 25px 180px; }
+        .view.active { display: block; animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 🔘 UI Elements */
+        .btn-mega { background: var(--glass); backdrop-filter: blur(40px); border: 1px solid var(--border); border-radius: 35px; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; }
+        .btn-mega:active { transform: scale(0.85); background: #fff; color: #000; }
+
+        .song-card { display: flex; align-items: center; background: var(--glass); padding: 18px; border-radius: 30px; margin-bottom: 20px; border: 1px solid var(--border); }
+        .song-card img { width: 80px; height: 80px; border-radius: 20px; margin-right: 18px; }
+
+        /* 🎵 Elite Player */
+        #player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 5000; transform: translateY(100%); transition: 0.7s cubic-bezier(0.19, 1, 0.22, 1); padding: 60px 30px; display: flex; flex-direction: column; align-items: center; }
+        #player-overlay.active { transform: translateY(0); }
+        .art-box { width: 100%; aspect-ratio: 1/1; border-radius: 50px; overflow: hidden; box-shadow: 0 30px 80px var(--glow); margin: 40px 0; }
+        .art-box img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 🧭 Nav Dock */
+        .nav-dock { position: fixed; bottom: 35px; left: 25px; right: 25px; height: 95px; background: rgba(255,255,255,0.08); backdrop-filter: blur(40px); border-radius: 50px; display: flex; justify-content: space-around; align-items: center; border: 1px solid var(--border); z-index: 4000; }
+        .nav-link svg { width: 35px; height: 35px; color: #666; }
+        .nav-link.active svg { color: #fff; filter: drop-shadow(0 0 8px #fff); }
+
+        #toast { position: fixed; top: 40px; left: 50%; transform: translateX(-50%); background: var(--ios-pink); padding: 15px 35px; border-radius: 50px; z-index: 10000; display: none; }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+<div id="yt-engine" style="display:none;"><div id="player"></div></div>
+<div class="bg-mesh"><div class="blob"></div></div>
+
+<header style="padding: 70px 30px 20px; display: flex; justify-content: space-between; align-items: center;">
+    <h2 style="margin:0; font-size: 45px;">Pixel<span style="color:var(--ios-pink)">.</span></h2>
+    <div id="auth-box">
+        <div id="g_id_onload" data-callback="handleAuth"></div>
+        <div class="g_id_signin" data-type="icon" data-shape="circle"></div>
+    </div>
+</header>
+
+<div id="home-view" class="view active">
+    <div style="background: var(--glass); padding: 35px; border-radius: 40px; border: 1px solid var(--border); margin-bottom: 40px;">
+        <h3 style="margin:0;">Jam Session</h3>
+        <div style="display:flex; gap:15px; margin-top:25px;">
+            <button class="btn-mega" style="flex:1; height:80px;" onclick="createJam()">CREATE</button>
+            <button class="btn-mega" style="flex:1; height:80px;" onclick="joinJam()">JOIN</button>
+        </div>
+    </div>
+    <div id="home-feed"></div>
+</div>
+
+<div id="search-view" class="view">
+    <input id="sq" placeholder="Search Music..." style="width:100%; height:80px; background:var(--glass); border:none; border-radius:30px; padding:0 30px; color:white; font-size:24px; border:1px solid var(--border);" onkeyup="if(event.key==='Enter') startSearch()">
+    <div id="search-results" style="margin-top:30px;"></div>
+</div>
+
+<div id="library-view" class="view">
+    <h2>My Library</h2>
+    <div id="lib-content"></div>
+</div>
+
+<div id="player-overlay">
+    <button class="btn-mega" style="width:80px; height:80px; align-self:flex-start;" onclick="togglePlayer(false)">▼</button>
+    <div class="art-box"><img id="f-img" src=""></div>
+    <h1 id="f-title" style="font-size:32px; margin:0; text-align:center;">Song</h1>
+    <p id="f-artist" style="color:#666; font-size:20px;">Artist</p>
+
+    <div style="display:flex; justify-content:space-around; align-items:center; width:100%; margin-top:50px;">
+        <button class="btn-mega" style="width:100px; height:100px; font-size:30px;" onclick="playPrev()">⏮</button>
+        <button class="btn-mega" style="width:150px; height:150px; background:#fff; color:#000; font-size:60px;" onclick="togglePlay()"><span id="p-icon">▶</span></button>
+        <button class="btn-mega" style="width:100px; height:100px; font-size:30px;" onclick="playNext()">⏭</button>
+    </div>
+</div>
+
+<div class="nav-dock">
+    <div class="nav-link active" onclick="switchTab('home', this)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
+    <div class="nav-link" onclick="switchTab('search', this)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div>
+    <div class="nav-link" onclick="switchTab('library', this)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg></div>
+</div>
+
+<script>
+    let yt, apiKey, currentUser = null, playlist = [], currentIndex = 0, jamRoom = null;
+    const socket = io();
+
+    function onYouTubeIframeAPIReady() {
+        yt = new YT.Player('player', { height: '0', width: '0', events: { 'onStateChange': e => {
+            document.getElementById("p-icon").innerText = (e.data === 1) ? "II" : "▶";
+            if(e.data === 0) playNext();
+        }}});
+    }
+
+    async function init() {
+        const res = await fetch("/api/config");
+        const data = await res.json();
+        apiKey = data.yt;
+        google.accounts.id.initialize({ client_id: data.gId, callback: handleAuth });
+        google.accounts.id.renderButton(document.getElementById("auth-box"), { theme: "outline", size: "large" });
+        loadFeed();
+    }
+
+    async function handleAuth(response) {
+        const res = await fetch("/api/google-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: response.credential }) });
+        currentUser = await res.json();
+        document.getElementById("auth-box").innerHTML = `<img src="${currentUser.picture}" style="width:55px; border-radius:50%; border:2px solid var(--ios-pink);">`;
+        loadLibrary();
+    }
+
+    async function loadFeed() {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=GlobalHits2025&type=video&maxResults=12&key=${apiKey}`);
+        const data = await res.json();
+        playlist = data.items;
+        renderList(playlist, "home-feed");
+    }
+
+    async function startSearch() {
+        const q = document.getElementById("sq").value;
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=15&key=${apiKey}`);
+        const data = await res.json();
+        playlist = data.items;
+        renderList(playlist, "search-results");
+    }
+
+    function renderList(items, target) {
+        document.getElementById(target).innerHTML = items.map((v, i) => `
+            <div class="song-card" onclick="playSong(${i})">
+                <img src="${v.snippet.thumbnails.medium.url}">
+                <div><h4>${v.snippet.title}</h4><p>${v.snippet.channelTitle}</p></div>
+            </div>`).join('');
+    }
+
+    function playSong(index) {
+        currentIndex = index;
+        const s = playlist[index];
+        const id = s.id.videoId || s.id;
+        const title = s.snippet?.title || s.title;
+        const img = s.snippet?.thumbnails?.high?.url || s.img;
+        const artist = s.snippet?.channelTitle || s.artist;
+
+        yt.loadVideoById(id);
+        document.getElementById("f-img").src = img;
+        document.getElementById("f-title").innerText = title;
+        document.getElementById("f-artist").innerText = artist;
+        document.getElementById("player-overlay").classList.add("active");
+
+        if(jamRoom) socket.emit("sync-play", { room: jamRoom, id, title, img, artist });
+        if(currentUser) fetch("/api/library/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUser.userId, song: {id, title, img, artist} }) });
+    }
+
+    function playNext() { if(currentIndex < playlist.length - 1) playSong(currentIndex + 1); }
+    function playPrev() { if(currentIndex > 0) playSong(currentIndex - 1); }
+    function togglePlay() { (yt.getPlayerState()===1)?yt.pauseVideo():yt.playVideo(); }
+    function togglePlayer(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    
+    function switchTab(t, el) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+        document.getElementById(t+'-view').classList.add('active');
+        el.classList.add('active');
+    }
+
+    async function loadLibrary() {
+        const res = await fetch(`/api/library/${currentUser.userId}`);
+        const songs = await res.json();
+        document.getElementById("lib-content").innerHTML = songs.map((s, i) => `
+            <div class="song-card" onclick="playlist=[...${JSON.stringify(songs)}]; playSong(${i})">
+                <img src="${s.img}">
+                <div><h4>${s.title}</h4></div>
+            </div>`).join('');
+    }
+
+    socket.on("play", d => {
+        yt.loadVideoById(d.id);
+        document.getElementById("f-img").src = d.img;
+        document.getElementById("f-title").innerText = d.title;
+        document.getElementById("player-overlay").classList.add("active");
+    });
+
+    init();
+</script>
+</body>
+</html>
