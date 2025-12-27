@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pixel Music Elite</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        :root { 
+            --ios-pink: #ff2d55; 
+            --glow: rgba(255, 45, 85, 0.5); 
+            --glass: rgba(255, 255, 255, 0.1); 
+            --border: rgba(255, 255, 255, 0.15); 
+        }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            margin: 0; background: #000; color: #fff; 
+            font-family: -apple-system, system-ui, sans-serif; 
+            overflow: hidden; height: 100dvh; user-select: none;
+        }
+
+        /* Background Effects */
+        .bg-mesh { position: fixed; inset: 0; z-index: -2; background: #000; overflow: hidden; }
+        .blob { 
+            position: absolute; width: 500px; height: 500px; border-radius: 50%; 
+            filter: blur(80px); opacity: 0.2; background: var(--ios-pink); 
+            animation: orbit 20s infinite alternate; 
+        }
+        @keyframes orbit { from { transform: translate(-20%, -20%); } to { transform: translate(100%, 80%); } }
+
+        /* Screens & Views */
+        #auth-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        
+        .view { 
+            display: none; height: 100dvh; overflow-y: auto; 
+            padding: 110px 25px 220px; /* Extra padding to avoid overlap with miniplayer & dock */
+            scroll-behavior: smooth; 
+        }
+        .view.active { display: block; animation: slideUp 0.4s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* UI Elements */
+        .btn-mega { 
+            background: var(--glass); backdrop-filter: blur(30px); border: 1px solid var(--border); 
+            border-radius: 20px; color: white; display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; transition: 0.2s; font-weight: bold; 
+        }
+        .btn-mega:active { transform: scale(0.92); background: #fff; color: #000; }
+
+        .song-card { 
+            display: flex; align-items: center; background: var(--glass); padding: 12px; 
+            border-radius: 20px; margin-bottom: 12px; border: 1px solid var(--border);
+        }
+        .song-card img { width: 55px; height: 55px; border-radius: 12px; margin-right: 15px; object-fit: cover; }
+
+        /* Visualizer */
+        #viz-container { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 40px; margin: 20px 0; }
+        .bar { width: 5px; background: var(--ios-pink); border-radius: 3px; height: 5px; transition: 0.2s; }
+        .playing .bar { animation: dance 0.8s infinite ease-in-out; }
+        @keyframes dance { 0%, 100% { height: 8px; } 50% { height: 35px; } }
+
+        /* Players */
+        #mini-player { 
+            position: fixed; bottom: 115px; left: 15px; right: 15px; height: 75px; 
+            background: rgba(20, 20, 20, 0.95); backdrop-filter: blur(25px); 
+            border-radius: 22px; display: none; align-items: center; padding: 0 15px; 
+            border: 1px solid var(--border); z-index: 4500; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        #player-overlay { 
+            position: fixed; inset: 0; background: #000; z-index: 5000; 
+            transform: translateY(100%); transition: 0.5s cubic-bezier(0.19, 1, 0.22, 1); 
+            padding: 60px 30px; display: flex; flex-direction: column; align-items: center; 
+        }
+        #player-overlay.active { transform: translateY(0); }
+
+        /* Nav Dock */
+        .nav-dock { 
+            position: fixed; bottom: 25px; left: 20px; right: 20px; height: 80px; 
+            background: rgba(255,255,255,0.05); backdrop-filter: blur(40px); 
+            border-radius: 35px; display: flex; justify-content: space-around; 
+            align-items: center; border: 1px solid var(--border); z-index: 4000; 
+        }
+        .nav-link { text-align: center; color: #666; font-size: 11px; font-weight: 900; transition: 0.3s; }
+        .nav-link.active { color: #fff; transform: translateY(-3px); }
+
+        /* Others */
+        .slider { width: 100%; height: 6px; background: #333; border-radius: 10px; outline: none; accent-color: var(--ios-pink); margin: 30px 0; }
+        #toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: var(--ios-pink); padding: 12px 25px; border-radius: 50px; z-index: 10000; display: none; font-weight: bold; box-shadow: 0 5px 20px var(--glow); }
+        .fav-icon { font-size: 28px; color: #444; transition: 0.3s; }
+        .fav-icon.active { color: var(--ios-pink); text-shadow: 0 0 15px var(--glow); }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div id="auth-screen">
+    <h1 style="font-size: 60px; margin: 0;">Pixel<span style="color:var(--ios-pink)">.</span></h1>
+    <p style="opacity: 0.5; letter-spacing: 3px; font-weight: bold;">ELITE MUSIC JAM</p>
+    <div style="margin: 40px 0;">
+        <button class="btn-mega" style="width: 220px; height: 65px; font-size: 16px;" onclick="guestLogin()">GET STARTED</button>
+    </div>
+</div>
+
+<div class="bg-mesh"><div class="blob"></div></div>
+
+<header id="main-header" style="position:fixed; top:0; width:100%; padding: 60px 25px 15px; display: none; justify-content: space-between; align-items: center; z-index: 4200; background: linear-gradient(to bottom, #000, transparent);">
+    <div>
+        <h2 style="margin:0; font-size: 28px; font-weight: 900;">Pixel<span style="color:var(--ios-pink)">.</span></h2>
+        <small id="room-id-tag" style="color:var(--ios-pink); font-weight:bold;"></small>
+    </div>
+    <div id="user-avatar" style="border: 2px solid var(--ios-pink); border-radius: 50%; padding: 2px;"></div>
+</header>
+
+<div id="home-view" class="view">
+    <div id="jam-info" style="background: var(--glass); border: 1px solid var(--ios-pink); padding: 20px; border-radius: 25px; margin-bottom: 25px; display: none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <b id="active-room-text" style="font-size: 18px;">ROOM: --</b>
+            <button class="btn-mega" style="height:35px; padding:0 20px; background:#fff; color:#000;" onclick="leaveJam()">LEAVE</button>
+        </div>
+        <div id="jam-users-list" style="margin-top:15px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+    </div>
+
+    <div id="jam-setup" style="display:flex; gap:12px; margin-bottom:35px;">
+        <button class="btn-mega" style="flex:1; height:60px;" onclick="createJam()">CREATE JAM</button>
+        <button class="btn-mega" style="flex:1; height:60px;" onclick="joinJam()">JOIN JAM</button>
+    </div>
+
+    <h3 style="font-size: 22px;">Trending Now</h3>
+    <div id="home-feed"></div>
+</div>
+
+<div id="search-view" class="view">
+    <input id="sq" placeholder="Search song, artist..." style="width:100%; height:65px; background:var(--glass); border:1px solid var(--border); border-radius:22px; padding:0 25px; color:#fff; font-size:18px; margin-bottom: 20px;" onkeyup="if(event.key==='Enter') startSearch()">
+    <div id="search-results"></div>
+</div>
+
+<div id="library-view" class="view">
+    <h3 style="font-size: 28px; margin-bottom: 20px;">Your Library</h3>
+    <div id="library-list"></div>
+</div>
+
+<div id="mini-player" onclick="togglePlayer(true)">
+    <img id="m-img" src="" style="width:50px; height:50px; border-radius:12px; margin-right:15px;">
+    <div style="flex:1; overflow:hidden;"><b id="m-title" style="white-space:nowrap; font-size:15px;">...</b></div>
+    <button class="btn-mega" style="width:50px; height:50px; border-radius:50%; font-size:20px;" onclick="event.stopPropagation(); togglePlay();">▶</button>
+</div>
+
+<div id="player-overlay">
+    <button class="btn-mega" style="width:50px; height:50px; align-self:flex-start; margin-bottom: 20px;" onclick="togglePlayer(false)">▼</button>
+    
+    <img id="f-img" src="" style="width: 85vw; height: 85vw; max-width:340px; border-radius: 35px; margin-bottom: 30px; box-shadow: 0 30px 60px rgba(0,0,0,0.8);">
+
+    <div id="viz-container">
+        <div class="bar" style="animation-delay: 0.1s"></div>
+        <div class="bar" style="animation-delay: 0.3s"></div>
+        <div class="bar" style="animation-delay: 0.5s"></div>
+        <div class="bar" style="animation-delay: 0.2s"></div>
+        <div class="bar" style="animation-delay: 0.4s"></div>
+    </div>
+
+    <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+        <div style="flex:1; overflow:hidden;">
+            <h2 id="f-title" style="margin:0; font-size:24px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Song</h2>
+            <p id="f-artist" style="opacity:0.5; margin:8px 0; font-size: 18px;">Artist</p>
+        </div>
+        <div id="fav-btn" onclick="toggleFavorite()" style="cursor:pointer; padding:10px;">
+            <span class="fav-icon" id="fav-icon-heart">❤</span>
+        </div>
+    </div>
+
+    <input type="range" id="seek-slider" class="slider" value="0" onchange="seekSong(this.value)">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-top:20px;">
+        <button class="btn-mega" style="width:75px; height:75px; font-size:28px;" onclick="playPrev()">⏮</button>
+        <button class="btn-mega" style="width:95px; height:95px; font-size:45px; border-radius:50%; background:#fff; color:#000;" onclick="togglePlay()"><span id="p-icon">▶</span></button>
+        <button class="btn-mega" style="width:75px; height:75px; font-size:28px;" onclick="playNext()">⏭</button>
+    </div>
+</div>
+
+<nav class="nav-dock" id="bottom-nav" style="display:none;">
+    <div class="nav-link active" onclick="switchTab('home', this)"><b>HOME</b></div>
+    <div class="nav-link" onclick="switchTab('search', this)"><b>SEARCH</b></div>
+    <div class="nav-link" onclick="switchTab('library', this)"><b>LIBRARY</b></div>
+</nav>
+
+<div id="yt-engine" style="position:fixed; left:-9999px;"><div id="player"></div></div>
+
+<script>
+    let yt, apiKey, currentUser = null, playlist = [], favorites = [], currentIndex = 0, jamRoom = null;
+    const socket = io();
+
+    function onYouTubeIframeAPIReady() {
+        yt = new YT.Player('player', { height: '0', width: '0', events: { 
+            'onStateChange': e => {
+                const isPlaying = (e.data === 1);
+                document.getElementById("p-icon").innerText = isPlaying ? "II" : "▶";
+                document.getElementById("viz-container").classList.toggle("playing", isPlaying);
+                if(e.data === 0) playNext();
+            }
+        }});
+        setInterval(updateProgress, 1000);
+    }
+
+    async function init() {
+        try {
+            const res = await fetch("/api/config");
+            const data = await res.json();
+            apiKey = data.yt;
+            
+            // Favorites Restore
+            const savedFavs = localStorage.getItem('pixelFavs');
+            if(savedFavs) favorites = JSON.parse(savedFavs);
+
+            const savedUser = localStorage.getItem('pixelUser');
+            if(savedUser) { currentUser = JSON.parse(savedUser); showApp(); }
+        } catch(e) { console.log("Init error"); }
+    }
+
+    function guestLogin() {
+        currentUser = { username: "User-" + Math.floor(Math.random()*999), picture: "https://www.w3schools.com/howto/img_avatar.png" };
+        localStorage.setItem('pixelUser', JSON.stringify(currentUser));
+        showApp();
+    }
+
+    function showApp() {
+        document.getElementById("auth-screen").style.display = "none";
+        document.getElementById("main-header").style.display = "flex";
+        document.getElementById("bottom-nav").style.display = "flex";
+        document.getElementById("home-view").classList.add("active");
+        document.getElementById("user-avatar").innerHTML = `<img src="${currentUser.picture}" style="width:40px; border-radius:50%;">`;
+        loadFeed();
+    }
+
+    async function loadFeed() {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=LatestMusicVideos2025&type=video&maxResults=12&key=${apiKey}`);
+        const data = await res.json(); playlist = data.items; renderList(playlist, "home-feed");
+    }
+
+    async function startSearch() {
+        const q = document.getElementById("sq").value;
+        if(!q) return;
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=15&key=${apiKey}`);
+        const data = await res.json(); playlist = data.items; renderList(playlist, "search-results");
+    }
+
+    function renderList(items, target) {
+        document.getElementById(target).innerHTML = items.map((v, i) => {
+            const id = v.id?.videoId || v.id;
+            const title = v.snippet?.title || v.title;
+            const thumb = v.snippet?.thumbnails?.medium?.url || v.img;
+            return `<div class="song-card" onclick="playSong(${i}, '${target}')">
+                <img src="${thumb}">
+                <div style="flex:1; overflow:hidden;">
+                    <b style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${title}</b>
+                    <small style="opacity:0.5;">${v.snippet?.channelTitle || v.artist || 'Artist'}</small>
+                </div>
+            </div>`}).join('');
+    }
+
+    function playSong(index, source = 'playlist') {
+        let currentList = (source === 'library-list') ? favorites : playlist;
+        currentIndex = index;
+        const s = currentList[index];
+        const id = s.id?.videoId || s.id;
+        yt.loadVideoById(id);
+        
+        const title = s.snippet?.title || s.title;
+        const img = s.snippet?.thumbnails?.high?.url || s.img;
+        const artist = s.snippet?.channelTitle || s.artist;
+
+        document.getElementById("f-img").src = document.getElementById("m-img").src = img;
+        document.getElementById("f-title").innerText = document.getElementById("m-title").innerText = title;
+        document.getElementById("f-artist").innerText = artist;
+        document.getElementById("mini-player").style.display = "flex";
+        
+        checkFavStatus(id);
+
+        if(jamRoom) socket.emit("sync-play", { room: jamRoom, id, title, img, artist });
+    }
+
+    function togglePlay() { 
+        const state = yt.getPlayerState();
+        if (state === 1) yt.pauseVideo(); else yt.playVideo(); 
+    }
+
+    function toggleFavorite() {
+        const currentView = document.querySelector('.view.active').id;
+        const s = (currentView === 'library-view') ? favorites[currentIndex] : playlist[currentIndex];
+        if(!s) return;
+
+        const id = s.id?.videoId || s.id;
+        const idx = favorites.findIndex(f => (f.id?.videoId || f.id) === id);
+
+        if(idx === -1) {
+            favorites.push({
+                id: id,
+                title: s.snippet?.title || s.title,
+                img: s.snippet?.thumbnails?.high?.url || s.img,
+                artist: s.snippet?.channelTitle || s.artist
+            });
+            showToast("Added to Library ❤️");
+        } else {
+            favorites.splice(idx, 1);
+            showToast("Removed from Library");
+        }
+        
+        localStorage.setItem('pixelFavs', JSON.stringify(favorites));
+        checkFavStatus(id);
+        if(currentView === 'library-view') renderList(favorites, "library-list");
+    }
+
+    function checkFavStatus(id) {
+        const isFav = favorites.some(f => (f.id?.videoId || f.id || f) === id);
+        document.getElementById("fav-icon-heart").classList.toggle("active", isFav);
+    }
+
+    // --- JAM ---
+    function createJam() { joinProcess("PXL-" + Math.floor(1000 + Math.random() * 9000)); }
+    function joinJam() { 
+        const code = prompt("Enter Jam Code:");
+        if(code) joinProcess(code.toUpperCase());
+    }
+    function joinProcess(code) {
+        jamRoom = code;
+        socket.emit("join", { room: code, username: currentUser.username });
+        document.getElementById("jam-info").style.display = "block";
+        document.getElementById("jam-setup").style.display = "none";
+        document.getElementById("room-id-tag").innerText = "JAM: " + code;
+        document.getElementById("active-room-text").innerText = "ROOM: " + code;
+    }
+    function leaveJam() { location.reload(); }
+
+    socket.on("user-list", users => {
+        document.getElementById("jam-users-list").innerHTML = users.map(u => `<div style="background:rgba(255,255,255,0.1); padding:5px 12px; border-radius:50px; font-size:12px; border:1px solid var(--border);">● ${u}</div>`).join('');
+    });
+
+    socket.on("sync-play", d => {
+        yt.loadVideoById(d.id);
+        document.getElementById("f-title").innerText = document.getElementById("m-title").innerText = d.title;
+        document.getElementById("f-img").src = document.getElementById("m-img").src = d.img;
+        document.getElementById("mini-player").style.display = "flex";
+    });
+
+    function updateProgress() {
+        if(yt && yt.getDuration && yt.getPlayerState() === 1) {
+            document.getElementById("seek-slider").value = (yt.getCurrentTime() / yt.getDuration()) * 100;
+        }
+    }
+
+    function switchTab(t, el) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+        document.getElementById(t+'-view').classList.add('active'); 
+        el.classList.add('active');
+        if(t === 'library') renderList(favorites, "library-list");
+    }
+
+    function seekSong(v) { yt.seekTo(yt.getDuration() * (v/100), true); }
+    function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.style.display="block"; setTimeout(()=>t.style.display="none",2500); }
+    function togglePlayer(s) { document.getElementById("player-overlay").classList.toggle("active", s); }
+    
+    function playNext() {
+        const isLib = document.getElementById('library-view').classList.contains('active');
+        const list = isLib ? favorites : playlist;
+        if(currentIndex < list.length - 1) playSong(currentIndex + 1, isLib ? 'library-list' : 'playlist');
+    }
+    
+    function playPrev() {
+        const isLib = document.getElementById('library-view').classList.contains('active');
+        if(currentIndex > 0) playSong(currentIndex - 1, isLib ? 'library-list' : 'playlist');
+    }
+
+    init();
+</script>
+</body>
+</html>
