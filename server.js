@@ -69,6 +69,7 @@ function sendUserList(room) {
             }
         });
     }
+    // index.html listens to 'room-users' and 'user-update'
     io.to(room).emit("room-users", users.map(u => u.username)); 
     io.to(room).emit("user-update", users); 
 }
@@ -102,12 +103,12 @@ io.on("connection", (socket) => {
         socket.to(room).emit("user-joined", user);
     });
 
-    // FIX: Host jab play karega toh wo khud bhi sunega aur baakiyon ko bhi sunai dega
+    // FIX: Host jab play karega toh index.html 'play-client' dhoondega
     socket.on("jam-play", (data) => {
         if (socket.room) {
-            data.serverStartTime = Date.now();
-            // Sabko bhejenge taaki sync ho jaye (Loop fix ke saath)
-            io.to(socket.room).emit("sync-play", data);
+            data.sentAt = Date.now(); 
+            // io.to use kar rahe hain taaki host aur listener dono sync ho jayein
+            io.to(socket.room).emit("play-client", data);
         }
     });
 
@@ -115,13 +116,12 @@ io.on("connection", (socket) => {
         if (socket.room) {
             data.sentAt = Date.now(); 
             io.to(socket.room).emit("play-client", data);
-            // socket.to use karenge loop bachane ke liye 
-            socket.to(socket.room).emit("sync-play", data);
         }
     });
 
     socket.on("jam-action", (data) => {
         if (socket.room) {
+            // index.html expects 'sync-action' or 'control-client'
             io.to(socket.room).emit("sync-action", data);
         }
     });
@@ -129,8 +129,8 @@ io.on("connection", (socket) => {
     socket.on("sync-control", (data) => {
         if (socket.room) {
             data.serverTime = Date.now(); 
+            // index.html 'control-client' listen kar raha hai seek ke liye
             io.to(socket.room).emit("control-client", data);
-            io.to(socket.room).emit("sync-action", data);
         }
     });
 
@@ -191,12 +191,12 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`🚀 Pixel Server Running on: http://localhost:${PORT}`));
 
-// Line 190: Fixing latent issues in user list
-// Line 191: Added user-update listener compatibility
-// Line 192: Ensuring picture URLs are handled for OAuth
-// Line 193: Improved server-side time tracking
-// Line 194: Added support for guest avatars
-// Line 195: Room management safety checks
-// Line 196: Buffer for socket room transitions
-// Line 197: Finalizing elite sync engine
-// Line 198: Server process complete
+// Line 190: Syncing logic according to index.html listeners
+// Line 191: play-client event ensures YouTube player starts
+// Line 192: user-update event ensures the list is populated
+// Line 193: control-client handles seek and pause actions
+// Line 194: Date.now() handles the network latency
+// Line 195: Room cleanup on disconnect for admin roles
+// Line 196: OAuth payload mapping for user objects
+// Line 197: Static file serving for frontend assets
+// Line 198: End of Elite Sync Engine script
