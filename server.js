@@ -60,7 +60,6 @@ function sendUserList(room) {
     if (clients) {
         clients.forEach(id => {
             const s = io.sockets.sockets.get(id);
-            // UPDATED: Ab username ke saath profile picture aur admin status bhi bhej rahe hain
             if (s && (s.username || s.userData)) {
                 users.push({
                     username: s.userData ? s.userData.username : s.username,
@@ -70,7 +69,6 @@ function sendUserList(room) {
             }
         });
     }
-    // Dono events bhej rahe hain compatibility ke liye
     io.to(room).emit("room-users", users.map(u => u.username)); 
     io.to(room).emit("user-update", users); 
 }
@@ -78,22 +76,19 @@ function sendUserList(room) {
 io.on("connection", (socket) => {
     console.log("New Socket Connected:", socket.id);
 
-    // 1. Room Validation Check
     socket.on("check-room", (room, callback) => {
         const exists = io.sockets.adapter.rooms.has(room);
         callback(exists);
     });
 
-    // 2. Joining Logic
     socket.on("join", (data) => {
-        // Handle both old and new data structures
         const room = data.room;
         const user = data.user || { username: data.username };
         
         socket.join(room);
         socket.room = room;
         socket.username = user.username;
-        socket.userData = user; // Storing full profile for shareable links
+        socket.userData = user; 
         
         if (!roomAdmins.has(room) || data.isAdmin) {
             roomAdmins.set(room, socket.id);
@@ -107,37 +102,36 @@ io.on("connection", (socket) => {
         socket.to(room).emit("user-joined", user);
     });
 
-    // 3. Play/Change Song Sync (Matches Frontend jam-play)
+    // FIX: Host jab play karega toh wo khud bhi sunega aur baakiyon ko bhi sunai dega
     socket.on("jam-play", (data) => {
         if (socket.room) {
-            socket.to(socket.room).emit("sync-play", data);
+            // Host ke liye emit (Syncing back to ensure state matches)
+            io.to(socket.room).emit("sync-play", data);
         }
     });
 
     socket.on("sync-play", (data) => {
         if (socket.room) {
             data.sentAt = Date.now(); 
-            socket.to(socket.room).emit("play-client", data);
-            socket.to(socket.room).emit("sync-play", data);
+            io.to(socket.room).emit("play-client", data);
+            io.to(socket.room).emit("sync-play", data);
         }
     });
 
-    // 4. Play/Pause/Seek Sync (Matches Frontend jam-action)
     socket.on("jam-action", (data) => {
         if (socket.room) {
-            socket.to(socket.room).emit("sync-action", data);
+            io.to(socket.room).emit("sync-action", data);
         }
     });
 
     socket.on("sync-control", (data) => {
         if (socket.room) {
             data.serverTime = Date.now(); 
-            socket.to(socket.room).emit("control-client", data);
-            socket.to(socket.room).emit("sync-action", data);
+            io.to(socket.room).emit("control-client", data);
+            io.to(socket.room).emit("sync-action", data);
         }
     });
 
-    // 5. End Jam Logic
     socket.on("close-room", (data) => {
         const room = data.room || data;
         if (roomAdmins.get(room) === socket.id) {
@@ -155,7 +149,6 @@ io.on("connection", (socket) => {
         }
     });
 
-    // 6. Leaving & Disconnection
     socket.on("leave-jam", (data) => {
         const room = data.room || socket.room;
         if (room) {
@@ -190,7 +183,6 @@ io.on("connection", (socket) => {
             }
             sendUserList(room);
         }
-        console.log("Socket Disconnected:", socket.id);
     });
 });
 
